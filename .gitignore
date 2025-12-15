@@ -9,7 +9,6 @@ config.yaml
 coverage.*
 bin/
 dist/
-ghr
 ghr.exe
 **/*.exe
 **/*.dll
