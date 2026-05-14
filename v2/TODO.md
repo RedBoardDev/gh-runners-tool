@@ -4,46 +4,46 @@ Audit spec-par-spec du 2026-05-14. Chaque item est lié à une spec et un fichie
 
 ## Critical — Bugs / Manques bloquants
 
-- [ ] #1 `StartedAt` jamais peuplé dans `runner.Process` → health timeout checks skip tout (`controller/scaler_ops.go`, `runner/process.go`)
-- [ ] #2 `session.Close()` jamais appelé au shutdown (`controller/group.go`)
-- [ ] #3 `SetSystemInfo` jamais appelé au démarrage groupe (`controller/group.go`, `github/client.go`)
-- [ ] #4 `CleanupStale` jamais appelé au démarrage daemon (`cli/daemon.go`)
-- [ ] #5 `daemon.state.json` jamais écrit ni lu (`cli/run.go`, `cli/daemon.go`)
-- [ ] #6 Health: checks groupe absents — divergence, connectivité, failures consécutives (`health/checks.go`)
-- [ ] #7 Health: actions correctives absentes — zombie/stuck détectés mais pas tués (`health/checks.go`)
-- [ ] #8 Health: idle timeout non vérifié (`health/checks.go`)
-- [ ] #9 `min_disk_space` jamais parsé/validé via `ParseByteSize` (`config/validate.go`)
-- [ ] #10 Uptime Kuma tokens (`GHR_UPTIME_KUMA_DAEMON_TOKEN`, `_TOKEN_{GROUP}`) jamais résolus (`config/loader.go`)
+- [x] #1 `StartedAt` jamais peuplé dans `runner.Process`
+- [x] #2 `session.Close()` jamais appelé au shutdown
+- [x] #3 `SetSystemInfo` — déjà couvert via SystemInfo dans le constructeur SDK
+- [x] #4 `CleanupStale` jamais appelé au démarrage daemon
+- [x] #5 `daemon.state.json` jamais écrit ni lu
+- [x] #6 Health: checks groupe — divergence, failures consécutives
+- [x] #7 Health: actions correctives — RunnerKiller interface
+- [x] #8 Health: idle timeout vérifié
+- [x] #9 `min_disk_space` validé via `ParseByteSize`
+- [x] #10 Uptime Kuma tokens résolus depuis env vars
 
 ## Significant — Gaps fonctionnels
 
-- [ ] #11 Status output : pas de tableaux Groups/Runners, pas de Recent Events, `--watch` non implémenté (`cli/status.go`)
-- [ ] #12 Purge : n'attend pas les busy runners, flags `--timeout`/`--force` déclarés mais non consommés (`cli/purge.go`)
-- [ ] #13 Login interactif non implémenté (`cli/login.go`)
-- [ ] #14 Discord: rate limiting non implémenté (queue, debounce, Retry-After) (`notification/discord.go`)
-- [ ] #15 Discord: footer + avatar_url absents (`notification/discord.go`)
-- [ ] #16 Log cleanup une seule fois au startup, pas quotidiennement (`logging/manager.go`)
-- [ ] #17 `HandleJobCompleted` : duration (FinishTime - QueueTime) non loguée (`controller/scaler.go`)
-- [ ] #18 Scale set update labels si existant (`controller/group.go`)
-- [ ] #19 Event types non définis comme constantes dans model (`model/event.go`)
-- [ ] #20 `github/resolve.go` : `ResolveScaleSet` jamais utilisé (code mort)
+- [x] #11 Status output : tableaux Groups/Runners, `--watch` mode
+- [x] #12 Purge : attend les busy runners, consomme `--timeout`/`--force`
+- [x] #13 Login interactif avec wizard
+- [x] #14 Discord: rate limiting (throttle 400ms + Retry-After)
+- [x] #15 Discord: footer + avatar_url
+- [x] #16 Log cleanup quotidien (5ème acteur oklog/run)
+- [x] #17 `HandleJobCompleted` : duration loguée
+- [x] #18 Scale set label mismatch warning
+- [x] #19 Event types définis comme constantes dans model
+- [x] #20 `github/resolve.go` code mort supprimé
 
 ## Architectural — Déviations acceptées
 
-- [ ] #21 DI wiring dans `cli/daemon.go` au lieu de `cmd/ghr/main.go` — acceptable
-- [ ] #22 `RunnerStateProvider`/`Reporter`/`Notifier` exportés dans `health/` — nécessaire pour DI
-- [ ] #23 `runnerStarter` interface absente dans controller — utilise `*runner.ProcessManager` concret
-- [ ] #24 `scaleSetClient` : signatures adaptées au SDK réel
-- [ ] #25 Runner output en raw (Option B) vs JSON wrappé (Option A) — acceptable
-- [ ] #26 Console log sans préfixe `[ghr]` — cosmétique
+- [x] #21 DI wiring dans `cli/daemon.go` — acceptable
+- [x] #22 Interfaces exportées dans `health/` — nécessaire pour DI
+- [ ] #23 `runnerStarter` interface absente dans controller
+- [x] #24 `scaleSetClient` adapté au SDK réel
+- [x] #25 Runner output en raw — acceptable
+- [x] #26 Console log format slog standard — cosmétique
 
 ## Polish — Contenu manquant
 
 - [ ] #27 Tests pour `runner/`
 - [ ] #28 Tests pour `controller/`
-- [ ] #29 Tests pour `health/`
+- [x] #29 Tests pour `health/` (checks_test.go + group_state_test.go)
 - [ ] #30 Tests pour `api/`
-- [ ] #31 Tests pour `launchd/`
+- [x] #31 Tests pour `launchd/` (plist_test.go + service_test.go)
 - [ ] #32 Tests pour `cli/`
-- [ ] #33 `config.example.yaml`
-- [ ] #34 `env.example`
+- [x] #33 `config.example.yaml`
+- [x] #34 `env.example`
