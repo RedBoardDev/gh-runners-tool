@@ -1,3 +1,0 @@
-groups:
-  - name: "test-simple"
-    max_runners: 1
