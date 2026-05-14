@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -90,6 +91,9 @@ func (m *ProcessManager) Stop(ctx context.Context, proc *Process) error {
 	m.logger.InfoContext(ctx, "stopping runner", "runner", proc.Name, "pid", proc.PID)
 
 	if err := proc.Cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		if isProcessFinished(err) {
+			return nil
+		}
 		return fmt.Errorf("send SIGTERM to runner %s (pid %d): %w", proc.Name, proc.PID, err)
 	}
 
@@ -100,6 +104,9 @@ func (m *ProcessManager) Stop(ctx context.Context, proc *Process) error {
 
 	select {
 	case err := <-done:
+		if isExpectedExit(err) {
+			return nil
+		}
 		return err
 	case <-time.After(stopGracePeriod):
 		m.logger.WarnContext(ctx, "runner did not exit after SIGTERM, sending SIGKILL", "runner", proc.Name, "pid", proc.PID)
@@ -108,6 +115,21 @@ func (m *ProcessManager) Stop(ctx context.Context, proc *Process) error {
 		}
 		return <-done
 	}
+}
+
+func isProcessFinished(err error) bool {
+	return errors.Is(err, os.ErrProcessDone)
+}
+
+func isExpectedExit(err error) bool {
+	if err == nil {
+		return true
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		return true
+	}
+	return false
 }
 
 func (m *ProcessManager) Cleanup(proc *Process) error {
