@@ -1,6 +1,8 @@
 # Binary
-ghr
-ghr.exe
+/ghr
+/ghr.exe
+/v2/ghr
+/v2/ghr.exe
 
 # Build
 bin/
