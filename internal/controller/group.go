@@ -17,7 +17,7 @@ const (
 	backoffMax = 30 * time.Second
 )
 
-func (c *GroupController) runGroup(ctx context.Context, group config.GroupConfig) error {
+func (c *GroupController) runGroup(ctx context.Context, group *config.GroupConfig) error {
 	version := group.Version
 	if version == "" {
 		version = c.globalCfg.RunnerVersion
@@ -60,7 +60,7 @@ func (c *GroupController) runGroup(ctx context.Context, group config.GroupConfig
 
 func (c *GroupController) runGroupOnce(
 	ctx context.Context,
-	group config.GroupConfig,
+	group *config.GroupConfig,
 	cachedDir string,
 	labels []string,
 	groupLogger *slog.Logger,

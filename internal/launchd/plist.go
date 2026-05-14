@@ -41,7 +41,7 @@ const plistTemplate = `<?xml version="1.0" encoding="UTF-8"?>
 </plist>
 `
 
-func generatePlist(cfg ServiceConfig) ([]byte, error) {
+func generatePlist(cfg *ServiceConfig) ([]byte, error) {
 	tmpl, err := template.New("plist").Parse(plistTemplate)
 	if err != nil {
 		return nil, fmt.Errorf("parse plist template: %w", err)

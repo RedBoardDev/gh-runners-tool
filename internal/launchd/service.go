@@ -21,7 +21,7 @@ func DefaultLabel() string { return "com.ghr.daemon" }
 
 func PlistPath(label string) string {
 	if os.Getuid() == 0 {
-		return filepath.Join("/Library/LaunchDaemons", label+".plist")
+		return filepath.Join("/Library", "LaunchDaemons", label+".plist")
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -31,7 +31,7 @@ func PlistPath(label string) string {
 }
 
 func Install(cfg ServiceConfig) error {
-	data, err := generatePlist(cfg)
+	data, err := generatePlist(&cfg)
 	if err != nil {
 		return fmt.Errorf("generate plist: %w", err)
 	}

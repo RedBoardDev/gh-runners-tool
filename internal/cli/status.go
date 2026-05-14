@@ -54,7 +54,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	return runWatch(cmd.Context(), socketPath, stateDir, jsonOutput, interval)
 }
 
-func renderOnce(socketPath string, stateDir string, jsonOutput bool) error {
+func renderOnce(socketPath, stateDir string, jsonOutput bool) error {
 	resp, socketErr := querySocket(socketPath, "/status")
 	if socketErr != nil {
 		return showOfflineStatus(stateDir, jsonOutput)
@@ -68,7 +68,7 @@ func renderOnce(socketPath string, stateDir string, jsonOutput bool) error {
 	return displayStatus(resp)
 }
 
-func runWatch(ctx context.Context, socketPath string, stateDir string, jsonOutput bool, interval time.Duration) error {
+func runWatch(ctx context.Context, socketPath, stateDir string, jsonOutput bool, interval time.Duration) error {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
@@ -109,7 +109,7 @@ func resolveStateDir() string {
 	return filepath.Join(home, ".local", "state", "ghr")
 }
 
-func querySocket(socketPath string, endpoint string) ([]byte, error) {
+func querySocket(socketPath, endpoint string) ([]byte, error) {
 	client := &http.Client{
 		Transport: &http.Transport{
 			DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {

@@ -41,7 +41,7 @@ func Save(creds *Credentials) error {
 
 	p := FilePath()
 	dir := filepath.Dir(p)
-	if err := os.MkdirAll(dir, 0700); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("create credentials directory %s: %w", dir, err)
 	}
 
@@ -50,7 +50,7 @@ func Save(creds *Credentials) error {
 		return fmt.Errorf("marshal credentials: %w", err)
 	}
 
-	if err := os.WriteFile(p, data, 0600); err != nil {
+	if err := os.WriteFile(p, data, 0o600); err != nil {
 		return fmt.Errorf("write credentials file %s: %w", p, err)
 	}
 	return nil

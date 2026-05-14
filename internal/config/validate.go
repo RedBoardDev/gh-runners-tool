@@ -18,11 +18,12 @@ func validate(cfg *Config) error {
 	for i, g := range cfg.Groups {
 		prefix := fmt.Sprintf("groups[%d]", i)
 
-		if g.Name == "" {
+		switch {
+		case g.Name == "":
 			errs = append(errs, fmt.Errorf("%s: name is required", prefix))
-		} else if seenNames[g.Name] {
+		case seenNames[g.Name]:
 			errs = append(errs, fmt.Errorf("%s: duplicate group name %q", prefix, g.Name))
-		} else {
+		default:
 			seenNames[g.Name] = true
 		}
 

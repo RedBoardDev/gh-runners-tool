@@ -30,7 +30,7 @@ func NewClient(creds *auth.Credentials, githubURL string) (*Client, error) {
 	}
 }
 
-func newPATClient(token string, githubURL string) (*Client, error) {
+func newPATClient(token, githubURL string) (*Client, error) {
 	inner, err := scaleset.NewClientWithPersonalAccessToken(scaleset.NewClientWithPersonalAccessTokenConfig{
 		GitHubConfigURL:     githubURL,
 		PersonalAccessToken: token,

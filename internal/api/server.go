@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -74,7 +75,7 @@ func (s *Server) Run(ctx context.Context) error {
 		if cleanupErr != nil && !os.IsNotExist(cleanupErr) {
 			s.logger.Warn("failed to remove socket file", "path", s.socketPath, "error", cleanupErr)
 		}
-		if err == http.ErrServerClosed {
+		if errors.Is(err, http.ErrServerClosed) {
 			return nil
 		}
 		return fmt.Errorf("api server: %w", err)

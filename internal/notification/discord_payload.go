@@ -32,7 +32,7 @@ type discordFooter struct {
 	Text string `json:"text"`
 }
 
-func (d *DiscordProvider) buildPayload(event model.Event) discordPayload {
+func (d *DiscordProvider) buildPayload(event *model.Event) discordPayload {
 	fields := d.buildFields(event)
 	embed := discordEmbed{
 		Title:       event.Type,
@@ -57,7 +57,7 @@ func (d *DiscordProvider) buildPayload(event model.Event) discordPayload {
 	return payload
 }
 
-func (d *DiscordProvider) buildFields(event model.Event) []discordField {
+func (d *DiscordProvider) buildFields(event *model.Event) []discordField {
 	var fields []discordField
 
 	if event.Group != "" {

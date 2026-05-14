@@ -2,6 +2,7 @@ package logging
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"log/slog"
 	"os"
@@ -144,11 +145,11 @@ func TestMultiHandler(t *testing.T) {
 		multi := NewMultiHandler(h1, h2)
 
 		// Debug should be enabled because h2 accepts it
-		if !multi.Enabled(nil, slog.LevelDebug) {
+		if !multi.Enabled(context.TODO(), slog.LevelDebug) {
 			t.Error("Enabled(Debug) = false, want true (h2 accepts Debug)")
 		}
 		// Info should be enabled because h2 accepts it
-		if !multi.Enabled(nil, slog.LevelInfo) {
+		if !multi.Enabled(context.TODO(), slog.LevelInfo) {
 			t.Error("Enabled(Info) = false, want true")
 		}
 	})
@@ -158,7 +159,7 @@ func TestMultiHandler(t *testing.T) {
 		h2 := slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})
 		multi := NewMultiHandler(h1, h2)
 
-		if multi.Enabled(nil, slog.LevelDebug) {
+		if multi.Enabled(context.TODO(), slog.LevelDebug) {
 			t.Error("Enabled(Debug) = true, want false (both require Error)")
 		}
 	})

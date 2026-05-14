@@ -14,7 +14,7 @@ func TestGeneratePlist_ValidConfig(t *testing.T) {
 		StateDir:   "/var/lib/ghr/state",
 	}
 
-	data, err := generatePlist(cfg)
+	data, err := generatePlist(&cfg)
 	if err != nil {
 		t.Fatalf("generatePlist() error = %v", err)
 	}
@@ -56,7 +56,7 @@ func TestGeneratePlist_SpecialChars(t *testing.T) {
 		StateDir:   "/tmp/state",
 	}
 
-	data, err := generatePlist(cfg)
+	data, err := generatePlist(&cfg)
 	if err != nil {
 		t.Fatalf("generatePlist() error = %v", err)
 	}

@@ -64,7 +64,7 @@ func (m *LogManager) trackWriter(w *dateAwareWriter) {
 
 func (m *LogManager) consoleHandler() slog.Handler {
 	opts := &slog.HandlerOptions{Level: m.level}
-	if strings.ToLower(m.cfg.Format) == "json" {
+	if strings.EqualFold(m.cfg.Format, "json") {
 		return slog.NewJSONHandler(os.Stderr, opts)
 	}
 	return slog.NewTextHandler(os.Stderr, opts)

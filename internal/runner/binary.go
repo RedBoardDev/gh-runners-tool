@@ -64,7 +64,7 @@ func (m *BinaryManager) EnsureBits(ctx context.Context, version string) (string,
 }
 
 func (m *BinaryManager) resolveLatestVersion(ctx context.Context) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.github.com/repos/actions/runner/releases/latest", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.github.com/repos/actions/runner/releases/latest", http.NoBody)
 	if err != nil {
 		return "", fmt.Errorf("create request: %w", err)
 	}

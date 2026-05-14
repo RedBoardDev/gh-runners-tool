@@ -8,7 +8,7 @@ import (
 func launchctlLoad(plistPath string) error {
 	out, err := exec.Command("launchctl", "load", plistPath).CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("%s: %s", err, string(out))
+		return fmt.Errorf("launchctl load: %w: %s", err, string(out))
 	}
 	return nil
 }
@@ -16,7 +16,7 @@ func launchctlLoad(plistPath string) error {
 func launchctlUnload(plistPath string) error {
 	out, err := exec.Command("launchctl", "unload", plistPath).CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("%s: %s", err, string(out))
+		return fmt.Errorf("launchctl unload: %w: %s", err, string(out))
 	}
 	return nil
 }
@@ -24,7 +24,7 @@ func launchctlUnload(plistPath string) error {
 func launchctlStart(label string) error {
 	out, err := exec.Command("launchctl", "start", label).CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("%s: %s", err, string(out))
+		return fmt.Errorf("launchctl start: %w: %s", err, string(out))
 	}
 	return nil
 }
@@ -32,7 +32,7 @@ func launchctlStart(label string) error {
 func launchctlStop(label string) error {
 	out, err := exec.Command("launchctl", "stop", label).CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("%s: %s", err, string(out))
+		return fmt.Errorf("launchctl stop: %w: %s", err, string(out))
 	}
 	return nil
 }

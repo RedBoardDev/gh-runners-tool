@@ -66,7 +66,7 @@ func (u *UptimeKuma) ReportGroupHealth(ctx context.Context, group string, actual
 	}
 }
 
-func (u *UptimeKuma) push(ctx context.Context, token string, status string, msg string, ping float64) error {
+func (u *UptimeKuma) push(ctx context.Context, token, status, msg string, ping float64) error {
 	baseURL := strings.TrimRight(u.cfg.BaseURL, "/")
 	pushURL := fmt.Sprintf("%s/api/push/%s?status=%s&msg=%s",
 		baseURL, token, status, url.QueryEscape(truncateMsg(msg, 250)))
@@ -75,7 +75,7 @@ func (u *UptimeKuma) push(ctx context.Context, token string, status string, msg 
 		pushURL += fmt.Sprintf("&ping=%.1f", ping)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pushURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pushURL, http.NoBody)
 	if err != nil {
 		return fmt.Errorf("create push request: %w", err)
 	}
@@ -92,7 +92,7 @@ func (u *UptimeKuma) push(ctx context.Context, token string, status string, msg 
 	return nil
 }
 
-func groupStatus(actual int, desired int, threshold float64) (string, string) {
+func groupStatus(actual, desired int, threshold float64) (string, string) {
 	if desired == 0 {
 		return "up", "idle (0 desired)"
 	}

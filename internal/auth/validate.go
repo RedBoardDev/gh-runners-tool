@@ -22,7 +22,7 @@ func Validate(ctx context.Context, creds *Credentials) (*ValidationResult, error
 }
 
 func validatePAT(ctx context.Context, pat string) (*ValidationResult, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.github.com/user", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.github.com/user", http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("validate PAT: create request: %w", err)
 	}
@@ -34,7 +34,7 @@ func validatePAT(ctx context.Context, pat string) (*ValidationResult, error) {
 		return nil, fmt.Errorf("validate PAT: request failed: %w", err)
 	}
 	defer func() {
-		_, _ = io.Copy(io.Discard, resp.Body) //nolint:errcheck
+		_, _ = io.Copy(io.Discard, resp.Body) //nolint:errcheck -- drain body before close
 		resp.Body.Close()
 	}()
 

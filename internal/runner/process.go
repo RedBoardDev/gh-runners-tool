@@ -126,10 +126,7 @@ func isExpectedExit(err error) bool {
 		return true
 	}
 	var exitErr *exec.ExitError
-	if errors.As(err, &exitErr) {
-		return true
-	}
-	return false
+	return errors.As(err, &exitErr)
 }
 
 func (m *ProcessManager) Cleanup(proc *Process) error {

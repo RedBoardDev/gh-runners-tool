@@ -75,12 +75,12 @@ func (c *GroupController) Run(ctx context.Context) error {
 
 	for _, g := range c.groups {
 		wg.Add(1)
-		go func(group config.GroupConfig) {
+		go func(group *config.GroupConfig) {
 			defer wg.Done()
 			if err := c.runGroup(ctx, group); err != nil {
 				errCh <- err
 			}
-		}(g)
+		}(&g)
 	}
 
 	<-ctx.Done()

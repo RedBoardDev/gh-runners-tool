@@ -17,7 +17,7 @@ type daemonState struct {
 	Groups     map[string]int `json:"groups"`
 }
 
-func writeDaemonState(stateDir string, configPath string) error {
+func writeDaemonState(stateDir, configPath string) error {
 	state := daemonState{
 		ConfigPath: configPath,
 		StartedAt:  time.Now(),

@@ -47,7 +47,7 @@ func (d *DiscordProvider) Name() string { return "discord" }
 func (d *DiscordProvider) Send(ctx context.Context, event model.Event) error {
 	d.throttle()
 
-	payload := d.buildPayload(event)
+	payload := d.buildPayload(&event)
 
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -62,7 +62,7 @@ func (d *DiscordProvider) Send(ctx context.Context, event model.Event) error {
 
 	if resp.StatusCode == http.StatusTooManyRequests {
 		retryAfter := parseRetryAfter(resp.Header.Get("Retry-After"))
-		io.Copy(io.Discard, resp.Body)
+		_, _ = io.Copy(io.Discard, resp.Body) //nolint:errcheck -- drain body before retry
 		resp.Body.Close()
 
 		select {
