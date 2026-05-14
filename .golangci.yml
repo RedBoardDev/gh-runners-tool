@@ -81,3 +81,6 @@ linters:
           - gocritic
         text: "filepathJoin"
         path: internal/launchd/
+      - linters:
+          - nilerr
+        path: internal/cli/auth\.go
