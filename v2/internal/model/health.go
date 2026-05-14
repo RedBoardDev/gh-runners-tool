@@ -12,10 +12,10 @@ type GroupHealthStatus struct {
 }
 
 type HealthIssue struct {
-	Level      EventLevel
-	Type       string
-	Group      string
-	Runner     string
-	Message    string
-	DetectedAt time.Time
+	Level      EventLevel `json:"level"`
+	Type       string     `json:"type"`
+	Group      string     `json:"group"`
+	Runner     string     `json:"runner"`
+	Message    string     `json:"message"`
+	DetectedAt time.Time  `json:"detected_at"`
 }

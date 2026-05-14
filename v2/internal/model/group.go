@@ -19,11 +19,11 @@ type RunnerInstance struct {
 }
 
 type RunnerSnapshot struct {
-	Name      string
-	Group     string
-	State     string
-	PID       int
-	StartedAt time.Time
-	JobName   string
-	JobID     string
+	Name      string    `json:"name"`
+	Group     string    `json:"group"`
+	State     string    `json:"state"`
+	PID       int       `json:"pid"`
+	StartedAt time.Time `json:"started_at"`
+	JobName   string    `json:"job_name"`
+	JobID     string    `json:"job_id"`
 }

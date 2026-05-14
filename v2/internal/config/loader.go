@@ -13,6 +13,8 @@ import (
 
 func Load(path string) (*Config, error) {
 	_ = godotenv.Load()
+	configDir := filepath.Dir(path)
+	_ = godotenv.Load(filepath.Join(configDir, ".env"))
 
 	data, err := os.ReadFile(path)
 	if err != nil {
