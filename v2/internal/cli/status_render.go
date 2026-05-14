@@ -9,15 +9,8 @@ import (
 )
 
 type statusResponse struct {
-	Service statusService             `json:"service"`
-	Groups  map[string][]statusRunner `json:"groups"`
-	Health  statusHealth              `json:"health"`
-}
-
-type statusService struct {
-	Status string `json:"status"`
-	PID    int    `json:"pid"`
-	Config string `json:"config"`
+	Groups map[string][]statusRunner `json:"groups"`
+	Health statusHealth              `json:"health"`
 }
 
 type statusRunner struct {
@@ -27,9 +20,17 @@ type statusRunner struct {
 	JobName string `json:"job_name"`
 }
 
+type statusHealthIssue struct {
+	Level   string `json:"level"`
+	Type    string `json:"type"`
+	Group   string `json:"group"`
+	Runner  string `json:"runner"`
+	Message string `json:"message"`
+}
+
 type statusHealth struct {
-	LastCheck string `json:"last_check"`
-	Issues    int    `json:"issues"`
+	LastCheck string              `json:"last_check"`
+	Issues    []statusHealthIssue `json:"issues"`
 }
 
 func showOfflineStatus(stateDir string, jsonOutput bool) error {
@@ -79,7 +80,7 @@ func displayStatus(data []byte) error {
 	label := launchd.DefaultLabel()
 	pid, _ := launchd.Status(label)
 
-	renderServiceSection(pid, status.Service.Config)
+	renderServiceSection(pid, "")
 	renderGroupsTable(status.Groups)
 	renderRunnersTable(status.Groups)
 	renderHealthSection(status.Health)
@@ -161,5 +162,8 @@ func renderHealthSection(h statusHealth) {
 	} else {
 		fmt.Println("  Last check:  n/a")
 	}
-	fmt.Printf("  Issues:      %d\n", h.Issues)
+	fmt.Printf("  Issues:      %d\n", len(h.Issues))
+	for _, issue := range h.Issues {
+		fmt.Printf("    [%s] %s: %s\n", issue.Level, issue.Type, issue.Message)
+	}
 }
