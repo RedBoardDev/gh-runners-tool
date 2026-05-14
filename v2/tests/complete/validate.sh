@@ -158,7 +158,7 @@ fi
 
 section "=== Cleanup State ==="
 
-ORPHAN_PROCS=$(ps aux 2>/dev/null | grep "[R]unner.Listener" | wc -l | tr -d ' ')
+ORPHAN_PROCS=$(pgrep -f "Runner.Listener" 2>/dev/null | wc -l | tr -d ' ')
 if [ "$ORPHAN_PROCS" -eq 0 ]; then pass "No orphan runner processes"
 else fail "$ORPHAN_PROCS orphan processes found"; fi
 
