@@ -1,213 +1,494 @@
 name: ghr v2 complete test
-on: workflow_dispatch
+on:
+  workflow_dispatch:
+    inputs:
+      stress_level:
+        description: "Number of parallel stress jobs per group"
+        default: "3"
+        type: choice
+        options: ["2", "3", "5"]
 
 jobs:
 
   # =============================================
-  # GROUP: ghr-fast (max=3, min=1)
-  # Tests: scale-up, concurrency, queuing, min_runners
+  # PHASE 1: STARTUP VALIDATION
+  # Runs immediately — checks min_runners pre-provisioning
   # =============================================
 
-  fast-concurrent-1:
+  startup-fast:
     runs-on: ghr-fast
     steps:
       - run: |
-          echo "=== fast-concurrent-1 ==="
-          echo "Runner: $RUNNER_NAME | Host: $(hostname) | PID: $$"
-          echo "Start: $(date -u +%H:%M:%S)"
-          sleep 20
-          echo "End: $(date -u +%H:%M:%S)"
-
-  fast-concurrent-2:
-    runs-on: ghr-fast
-    steps:
-      - run: |
-          echo "=== fast-concurrent-2 ==="
-          echo "Runner: $RUNNER_NAME | Host: $(hostname)"
-          sleep 20
-
-  fast-concurrent-3:
-    runs-on: ghr-fast
-    steps:
-      - run: |
-          echo "=== fast-concurrent-3 ==="
-          echo "Runner: $RUNNER_NAME | Host: $(hostname)"
-          sleep 20
-
-  fast-queued-after-slot:
-    runs-on: ghr-fast
-    needs: [fast-concurrent-1]
-    steps:
-      - run: |
-          echo "=== fast-queued (got slot after fast-1 freed) ==="
           echo "Runner: $RUNNER_NAME"
-          sleep 5
+          echo "This runner should already exist (min_runners=1)"
+          echo "Startup time: $(date -u +%H:%M:%S)"
 
-  fast-second-wave-1:
-    runs-on: ghr-fast
-    needs: [fast-concurrent-2]
+  startup-single:
+    runs-on: ghr-single
     steps:
       - run: |
-          echo "=== fast-second-wave-1 ==="
           echo "Runner: $RUNNER_NAME"
-          sleep 10
-
-  fast-second-wave-2:
-    runs-on: ghr-fast
-    needs: [fast-concurrent-3]
-    steps:
-      - run: |
-          echo "=== fast-second-wave-2 ==="
-          echo "Runner: $RUNNER_NAME"
-          sleep 10
+          echo "This runner should already exist (min_runners=1)"
+          echo "Startup time: $(date -u +%H:%M:%S)"
 
   # =============================================
-  # GROUP: ghr-heavy (max=2, min=0)
-  # Tests: max=2 cap, longer jobs, scale from zero
+  # PHASE 2: CONCURRENT SCALE-UP
+  # Hit max_runners on each group simultaneously
   # =============================================
 
-  heavy-build:
+  fast-burst-1:
+    runs-on: ghr-fast
+    needs: [startup-fast]
+    steps:
+      - run: |
+          echo "fast-burst-1 | Runner: $RUNNER_NAME | $(date -u +%H:%M:%S)"
+          sleep 30
+
+  fast-burst-2:
+    runs-on: ghr-fast
+    needs: [startup-fast]
+    steps:
+      - run: |
+          echo "fast-burst-2 | Runner: $RUNNER_NAME | $(date -u +%H:%M:%S)"
+          sleep 30
+
+  fast-burst-3:
+    runs-on: ghr-fast
+    needs: [startup-fast]
+    steps:
+      - run: |
+          echo "fast-burst-3 | Runner: $RUNNER_NAME | $(date -u +%H:%M:%S)"
+          sleep 30
+
+  heavy-burst-1:
     runs-on: ghr-heavy
+    needs: [startup-fast]
     steps:
       - run: |
-          echo "=== heavy-build ==="
-          echo "Runner: $RUNNER_NAME"
-          for i in $(seq 1 10); do
-            echo "Build step $i/10"
-            sleep 2
-          done
-          echo "Build complete"
+          echo "heavy-burst-1 | Runner: $RUNNER_NAME | $(date -u +%H:%M:%S)"
+          sleep 40
 
-  heavy-test-suite:
+  heavy-burst-2:
     runs-on: ghr-heavy
+    needs: [startup-fast]
     steps:
       - run: |
-          echo "=== heavy-test-suite ==="
-          echo "Runner: $RUNNER_NAME"
-          echo "Running test suite..."
+          echo "heavy-burst-2 | Runner: $RUNNER_NAME | $(date -u +%H:%M:%S)"
+          sleep 40
+
+  # =============================================
+  # PHASE 3: QUEUING PRESSURE
+  # More jobs than max_runners — forces queuing
+  # =============================================
+
+  fast-queue-1:
+    runs-on: ghr-fast
+    needs: [startup-fast]
+    steps:
+      - run: |
+          echo "fast-queue-1 (may be queued) | Runner: $RUNNER_NAME"
+          sleep 20
+
+  fast-queue-2:
+    runs-on: ghr-fast
+    needs: [startup-fast]
+    steps:
+      - run: |
+          echo "fast-queue-2 (may be queued) | Runner: $RUNNER_NAME"
+          sleep 20
+
+  fast-queue-3:
+    runs-on: ghr-fast
+    needs: [startup-fast]
+    steps:
+      - run: |
+          echo "fast-queue-3 (may be queued) | Runner: $RUNNER_NAME"
+          sleep 20
+
+  heavy-queue-1:
+    runs-on: ghr-heavy
+    needs: [startup-fast]
+    steps:
+      - run: |
+          echo "heavy-queue-1 (may be queued) | Runner: $RUNNER_NAME"
           sleep 25
-          echo "Tests passed"
 
-  heavy-third-queued:
+  # =============================================
+  # PHASE 4: REAL WORKLOADS
+  # Simulate actual CI tasks
+  # =============================================
+
+  real-checkout:
+    runs-on: ghr-fast
+    needs: [fast-burst-1]
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          echo "=== Checkout completed ==="
+          echo "Files: $(find . -type f | wc -l)"
+          echo "Disk: $(du -sh .)"
+          ls -la
+
+  real-build:
     runs-on: ghr-heavy
-    needs: [heavy-build]
+    needs: [heavy-burst-1]
     steps:
       - run: |
-          echo "=== heavy-third (queued while max=2 busy) ==="
+          echo "=== Simulating real build ==="
+          mkdir -p build/output
+          for i in $(seq 1 20); do
+            dd if=/dev/urandom bs=1024 count=100 of=build/output/artifact-$i.bin 2>/dev/null
+            echo "Built artifact $i/20"
+          done
+          echo "Total size: $(du -sh build/)"
+          echo "Disk free: $(df -h / | tail -1)"
+
+  real-test-matrix:
+    runs-on: ghr-fast
+    needs: [fast-burst-2]
+    strategy:
+      matrix:
+        test-suite: [unit, integration, e2e]
+      fail-fast: false
+    steps:
+      - run: |
+          echo "=== Test suite: ${{ matrix.test-suite }} ==="
           echo "Runner: $RUNNER_NAME"
-          sleep 5
+          case "${{ matrix.test-suite }}" in
+            unit)        sleep 10; echo "47 tests passed" ;;
+            integration) sleep 15; echo "23 tests passed" ;;
+            e2e)         sleep 20; echo "8 tests passed" ;;
+          esac
+
+  real-cpu-stress:
+    runs-on: ghr-heavy
+    needs: [heavy-burst-2]
+    steps:
+      - run: |
+          echo "=== CPU stress test ==="
+          echo "Runner: $RUNNER_NAME"
+          echo "Cores: $(sysctl -n hw.ncpu)"
+          echo "Starting prime calculation..."
+          start=$(date +%s)
+          python3 -c "
+          import math
+          primes = []
+          for n in range(2, 50000):
+              if all(n % p != 0 for p in primes):
+                  primes.append(n)
+          print(f'Found {len(primes)} primes up to 50000')
+          "
+          end=$(date +%s)
+          echo "Duration: $((end - start))s"
+
+  real-disk-io:
+    runs-on: ghr-heavy
+    needs: [real-build]
+    steps:
+      - run: |
+          echo "=== Disk I/O test ==="
+          echo "Runner: $RUNNER_NAME"
+          mkdir -p /tmp/ghr-io-test
+          echo "Writing 100MB..."
+          dd if=/dev/zero bs=1M count=100 of=/tmp/ghr-io-test/testfile 2>&1
+          echo "Reading back..."
+          dd if=/tmp/ghr-io-test/testfile of=/dev/null bs=1M 2>&1
+          rm -rf /tmp/ghr-io-test
+          echo "Disk free after cleanup: $(df -h / | tail -1)"
+
+  real-network:
+    runs-on: ghr-fast
+    needs: [fast-burst-3]
+    steps:
+      - run: |
+          echo "=== Network test ==="
+          echo "Runner: $RUNNER_NAME"
+          echo "DNS resolution..."
+          nslookup github.com
+          echo "HTTP request..."
+          curl -s -o /dev/null -w "Status: %{http_code}\nTime: %{time_total}s\nSize: %{size_download} bytes\n" https://api.github.com
+          echo "IP: $(curl -s ifconfig.me)"
+
+  real-env-check:
+    runs-on: ghr-single
+    needs: [startup-single]
+    steps:
+      - run: |
+          echo "=== Environment check ==="
+          echo "Runner: $RUNNER_NAME"
+          echo "OS: $(sw_vers -productName) $(sw_vers -productVersion)"
+          echo "Arch: $(uname -m)"
+          echo "Shell: $SHELL"
+          echo "User: $(whoami)"
+          echo "Home: $HOME"
+          echo "Cores: $(sysctl -n hw.ncpu)"
+          echo "Memory: $(sysctl -n hw.memsize | awk '{print $1/1024/1024/1024 " GB"}')"
+          echo "Disk: $(df -h / | tail -1)"
+          echo "Go: $(go version 2>/dev/null || echo 'not installed')"
+          echo "Python: $(python3 --version 2>/dev/null || echo 'not installed')"
+          echo "Node: $(node --version 2>/dev/null || echo 'not installed')"
+          echo "Git: $(git --version)"
 
   # =============================================
-  # GROUP: ghr-deploy (max=1, min=0)
-  # Tests: sequential enforcement, per-group health override
+  # PHASE 5: ERROR HANDLING
+  # Various failure modes
   # =============================================
+
+  error-exit-1:
+    runs-on: ghr-fast
+    needs: [fast-queue-1]
+    steps:
+      - run: echo "About to fail with exit 1"
+      - run: exit 1
+
+  error-exit-2:
+    runs-on: ghr-fast
+    needs: [fast-queue-2]
+    steps:
+      - run: exit 2
+
+  error-bad-command:
+    runs-on: ghr-fast
+    needs: [fast-queue-3]
+    steps:
+      - run: this-command-does-not-exist-at-all
+        continue-on-error: true
+      - run: echo "Continued after bad command"
+
+  error-timeout:
+    runs-on: ghr-fast
+    needs: [error-exit-1]
+    if: always()
+    timeout-minutes: 1
+    steps:
+      - run: |
+          echo "This job has a 1 minute timeout"
+          echo "Sleeping 45s (under the limit)..."
+          sleep 45
+          echo "Finished before timeout"
+
+  error-recovery:
+    runs-on: ghr-fast
+    needs: [error-exit-1, error-exit-2]
+    if: always()
+    steps:
+      - run: |
+          echo "=== Recovery after failures ==="
+          echo "Runner: $RUNNER_NAME"
+          echo "This proves the group still works after failed jobs"
+
+  # =============================================
+  # PHASE 6: SEQUENTIAL PIPELINE (ghr-deploy)
+  # Strict ordering, max=1 enforcement
+  # =============================================
+
+  deploy-validate:
+    runs-on: ghr-deploy
+    needs: [real-build, real-test-matrix]
+    steps:
+      - run: |
+          echo "=== Deploy: validation ==="
+          echo "Runner: $RUNNER_NAME | $(date -u +%H:%M:%S)"
+          sleep 10
+          echo "Validation passed"
 
   deploy-staging:
     runs-on: ghr-deploy
-    needs: [heavy-build, heavy-test-suite]
+    needs: [deploy-validate]
     steps:
       - run: |
-          echo "=== deploy-staging ==="
-          echo "Runner: $RUNNER_NAME"
-          echo "Deploying to staging..."
+          echo "=== Deploy: staging ==="
+          echo "Runner: $RUNNER_NAME | $(date -u +%H:%M:%S)"
           sleep 15
           echo "Staging deployed"
 
-  deploy-prod:
+  deploy-smoke-test:
     runs-on: ghr-deploy
     needs: [deploy-staging]
     steps:
       - run: |
-          echo "=== deploy-prod ==="
-          echo "Runner: $RUNNER_NAME"
-          echo "Deploying to production..."
+          echo "=== Deploy: smoke test ==="
+          echo "Runner: $RUNNER_NAME | $(date -u +%H:%M:%S)"
+          sleep 5
+          echo "Smoke test passed"
+
+  deploy-production:
+    runs-on: ghr-deploy
+    needs: [deploy-smoke-test]
+    steps:
+      - run: |
+          echo "=== Deploy: production ==="
+          echo "Runner: $RUNNER_NAME | $(date -u +%H:%M:%S)"
           sleep 15
           echo "Production deployed"
 
   deploy-verify:
     runs-on: ghr-deploy
-    needs: [deploy-prod]
+    needs: [deploy-production]
     steps:
       - run: |
-          echo "=== deploy-verify ==="
-          echo "Runner: $RUNNER_NAME"
-          echo "Smoke test..."
+          echo "=== Deploy: verification ==="
+          echo "Runner: $RUNNER_NAME | $(date -u +%H:%M:%S)"
           sleep 5
-          echo "Verified"
+          echo "Production verified"
 
   # =============================================
-  # GROUP: ghr-single (max=1, min=1)
-  # Tests: always-on runner, min=max=1
+  # PHASE 7: SECOND WAVE
+  # After first batch completes — tests scale-down then scale-up
   # =============================================
 
-  single-job-1:
-    runs-on: ghr-single
+  wave2-fast-1:
+    runs-on: ghr-fast
+    needs: [error-recovery, real-network]
     steps:
       - run: |
-          echo "=== single-job-1 ==="
+          echo "=== Wave 2 fast-1 ==="
+          echo "Runner: $RUNNER_NAME"
+          echo "Runners should have scaled down then back up"
+          sleep 15
+
+  wave2-fast-2:
+    runs-on: ghr-fast
+    needs: [error-recovery, real-network]
+    steps:
+      - run: |
+          echo "=== Wave 2 fast-2 ==="
+          echo "Runner: $RUNNER_NAME"
+          sleep 15
+
+  wave2-fast-3:
+    runs-on: ghr-fast
+    needs: [error-recovery, real-network]
+    steps:
+      - run: |
+          echo "=== Wave 2 fast-3 ==="
+          echo "Runner: $RUNNER_NAME"
+          sleep 15
+
+  wave2-heavy:
+    runs-on: ghr-heavy
+    needs: [real-disk-io, real-cpu-stress]
+    steps:
+      - run: |
+          echo "=== Wave 2 heavy ==="
+          echo "Runner: $RUNNER_NAME"
+          sleep 20
+
+  wave2-single-1:
+    runs-on: ghr-single
+    needs: [real-env-check]
+    steps:
+      - run: |
+          echo "=== Wave 2 single-1 ==="
           echo "Runner: $RUNNER_NAME"
           sleep 10
 
-  single-job-2:
+  wave2-single-2:
     runs-on: ghr-single
-    needs: [single-job-1]
+    needs: [wave2-single-1]
     steps:
       - run: |
-          echo "=== single-job-2 (sequential, same group) ==="
+          echo "=== Wave 2 single-2 ==="
           echo "Runner: $RUNNER_NAME"
           sleep 10
 
   # =============================================
-  # EDGE CASES
+  # PHASE 8: RAPID FIRE
+  # Many instant jobs to stress provisioning/cleanup
   # =============================================
 
-  edge-fail:
+  rapid-1:
     runs-on: ghr-fast
-    needs: [fast-second-wave-1]
+    needs: [wave2-fast-1]
     steps:
-      - run: |
-          echo "This job intentionally fails"
-          exit 1
+      - run: echo "rapid-1 | $RUNNER_NAME"
 
-  edge-fail-continue:
+  rapid-2:
     runs-on: ghr-fast
-    needs: [edge-fail]
-    if: always()
+    needs: [wave2-fast-1]
+    steps:
+      - run: echo "rapid-2 | $RUNNER_NAME"
+
+  rapid-3:
+    runs-on: ghr-fast
+    needs: [wave2-fast-1]
+    steps:
+      - run: echo "rapid-3 | $RUNNER_NAME"
+
+  rapid-4:
+    runs-on: ghr-fast
+    needs: [rapid-1]
+    steps:
+      - run: echo "rapid-4 | $RUNNER_NAME"
+
+  rapid-5:
+    runs-on: ghr-fast
+    needs: [rapid-2]
+    steps:
+      - run: echo "rapid-5 | $RUNNER_NAME"
+
+  rapid-6:
+    runs-on: ghr-fast
+    needs: [rapid-3]
+    steps:
+      - run: echo "rapid-6 | $RUNNER_NAME"
+
+  # =============================================
+  # PHASE 9: LONG RUNNING
+  # Tests that runners survive for longer periods
+  # =============================================
+
+  long-running:
+    runs-on: ghr-heavy
+    needs: [wave2-heavy]
     steps:
       - run: |
-          echo "=== Continues after failure ==="
+          echo "=== Long running job ==="
           echo "Runner: $RUNNER_NAME"
-
-  edge-instant:
-    runs-on: ghr-fast
-    needs: [edge-fail-continue]
-    steps:
-      - run: echo "instant"
-
-  edge-multi-step:
-    runs-on: ghr-heavy
-    needs: [heavy-third-queued]
-    steps:
-      - run: echo "step 1"
-      - run: echo "step 2"
-      - run: echo "step 3"
-      - run: |
-          echo "step 4 with env"
-          echo "HOME=$HOME"
-          echo "USER=$USER"
-          echo "RUNNER_NAME=$RUNNER_NAME"
-          echo "RUNNER_WORKSPACE=$RUNNER_WORKSPACE"
-
-  edge-long-output:
-    runs-on: ghr-heavy
-    needs: [edge-multi-step]
-    steps:
-      - run: |
-          echo "=== Generating output ==="
-          for i in $(seq 1 100); do
-            echo "Line $i: $(date -u +%H:%M:%S.%N) payload=$(openssl rand -hex 32)"
+          echo "Start: $(date -u +%H:%M:%S)"
+          for i in $(seq 1 12); do
+            echo "Minute $i/12: $(date -u +%H:%M:%S) | Memory: $(vm_stat | head -5 | tail -1)"
+            sleep 10
           done
-          echo "=== Done ==="
+          echo "End: $(date -u +%H:%M:%S)"
+          echo "Total: ~2 minutes"
+
+  # =============================================
+  # PHASE 10: CROSS-GROUP JOB OUTPUTS
+  # Tests data passing between jobs on different groups
+  # =============================================
+
+  output-producer:
+    runs-on: ghr-heavy
+    needs: [long-running]
+    outputs:
+      build_id: ${{ steps.gen.outputs.build_id }}
+      timestamp: ${{ steps.gen.outputs.timestamp }}
+    steps:
+      - id: gen
+        run: |
+          BUILD_ID="build-$(date +%s)-$(openssl rand -hex 4)"
+          echo "build_id=$BUILD_ID" >> $GITHUB_OUTPUT
+          echo "timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_OUTPUT
+          echo "Generated: $BUILD_ID"
+
+  output-consumer-fast:
+    runs-on: ghr-fast
+    needs: [output-producer]
+    steps:
+      - run: |
+          echo "=== Cross-group output ==="
+          echo "Build ID from heavy group: ${{ needs.output-producer.outputs.build_id }}"
+          echo "Timestamp: ${{ needs.output-producer.outputs.timestamp }}"
+
+  output-consumer-deploy:
+    runs-on: ghr-deploy
+    needs: [output-producer, deploy-verify]
+    steps:
+      - run: |
+          echo "=== Deploy with build ID ==="
+          echo "Deploying build: ${{ needs.output-producer.outputs.build_id }}"
+          sleep 5
 
   # =============================================
   # SUMMARY
@@ -216,39 +497,52 @@ jobs:
   summary:
     runs-on: ghr-fast
     needs:
-      - fast-second-wave-2
-      - deploy-verify
-      - single-job-2
-      - edge-instant
-      - edge-long-output
+      - wave2-fast-2
+      - wave2-fast-3
+      - wave2-single-2
+      - rapid-4
+      - rapid-5
+      - rapid-6
+      - error-timeout
+      - error-bad-command
+      - output-consumer-fast
+      - output-consumer-deploy
+      - long-running
     if: always()
     steps:
       - run: |
           echo "========================================="
-          echo "  ghr v2 complete test finished"
+          echo "  ghr v2 complete test — SUMMARY"
           echo "========================================="
           echo ""
           echo "Time: $(date -u)"
-          echo "Runner: $RUNNER_NAME"
-          echo "Host: $(hostname)"
+          echo "Runner: $RUNNER_NAME | Host: $(hostname)"
           echo ""
-          echo "Groups tested:"
-          echo "  - ghr-fast   (max=3, min=1)"
-          echo "  - ghr-heavy  (max=2, min=0)"
-          echo "  - ghr-deploy (max=1, min=0)"
-          echo "  - ghr-single (max=1, min=1)"
+          echo "Groups exercised:"
+          echo "  ghr-fast   (max=3, min=1) — burst, queue, matrix, rapid fire"
+          echo "  ghr-heavy  (max=2, min=0) — build, CPU, disk I/O, long run"
+          echo "  ghr-deploy (max=1, min=0) — 5-stage pipeline, sequential"
+          echo "  ghr-single (max=1, min=1) — always-on, env check"
           echo ""
           echo "Scenarios tested:"
-          echo "  - Concurrent scale-up to max"
-          echo "  - Job queuing when max reached"
-          echo "  - Scale from zero"
-          echo "  - Sequential enforcement (max=1)"
-          echo "  - Always-on runner (min=max=1)"
-          echo "  - Job failure + continue"
-          echo "  - Instant job"
-          echo "  - Multi-step job"
-          echo "  - High output volume"
-          echo "  - Cross-group parallelism"
+          echo "  [Scale]     Pre-provisioned min_runners"
+          echo "  [Scale]     Burst to max_runners"
+          echo "  [Scale]     Queuing under pressure"
+          echo "  [Scale]     Scale-down between waves"
+          echo "  [Scale]     Scale-up on second wave"
+          echo "  [Work]      Git checkout"
+          echo "  [Work]      File I/O (100MB write/read)"
+          echo "  [Work]      CPU stress (prime sieve)"
+          echo "  [Work]      Network (DNS + HTTP)"
+          echo "  [Work]      Matrix strategy (3 suites)"
+          echo "  [Work]      Cross-group job outputs"
+          echo "  [Work]      Long running (2 min)"
+          echo "  [Error]     exit 1 / exit 2"
+          echo "  [Error]     Bad command + continue-on-error"
+          echo "  [Error]     Job timeout (1 min limit)"
+          echo "  [Error]     Recovery after failures"
+          echo "  [Pipeline]  5-stage deploy (validate→staging→smoke→prod→verify)"
+          echo "  [Rapid]     6 instant jobs back-to-back"
+          echo "  [Env]       System info (OS, arch, memory, disk)"
           echo ""
-          echo "If Discord is configured: check for runner.failed notification"
-          echo "If Uptime Kuma is configured: check push status for all 4 groups"
+          echo "========================================="
