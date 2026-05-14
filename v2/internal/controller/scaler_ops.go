@@ -1,0 +1,111 @@
+package controller
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
+
+	"github.com/RedBoardDev/gh-runners-tool/v2/internal/model"
+	"github.com/RedBoardDev/gh-runners-tool/v2/internal/runner"
+)
+
+func (s *MacOSScaler) startRunner(ctx context.Context) error {
+	randBytes := make([]byte, 4)
+	if _, err := rand.Read(randBytes); err != nil {
+		return fmt.Errorf("generate runner ID: %w", err)
+	}
+	id := hex.EncodeToString(randBytes)
+	name := fmt.Sprintf("%s-%s", s.groupName, id)
+
+	jitConfig, err := s.client.GenerateJITConfig(ctx, s.scaleSetID, name)
+	if err != nil {
+		return fmt.Errorf("generate JIT config for %q: %w", name, err)
+	}
+
+	instance := model.RunnerInstance{
+		ID:    id,
+		Name:  name,
+		Group: s.groupName,
+	}
+
+	workdir, err := s.process.Prepare(ctx, instance, s.cachedDir)
+	if err != nil {
+		return fmt.Errorf("prepare runner %q: %w", name, err)
+	}
+
+	logFile, err := s.logMgr.RunnerOutputFile(s.groupName, name)
+	if err != nil {
+		return fmt.Errorf("open runner log for %q: %w", name, err)
+	}
+
+	proc, err := s.process.Start(ctx, instance, workdir, jitConfig, logFile)
+	if err != nil {
+		return fmt.Errorf("start runner %q: %w", name, err)
+	}
+
+	s.idle[name] = proc
+
+	s.logger.InfoContext(ctx, "runner provisioned",
+		"runner", name,
+		"group", s.groupName,
+		"pid", proc.PID,
+	)
+
+	return nil
+}
+
+func (s *MacOSScaler) Shutdown(ctx context.Context) {
+	s.mu.Lock()
+	allProcs := make([]*runner.Process, 0, len(s.idle)+len(s.busy))
+	for _, p := range s.idle {
+		allProcs = append(allProcs, p)
+	}
+	for _, p := range s.busy {
+		allProcs = append(allProcs, p)
+	}
+	s.idle = make(map[string]*runner.Process)
+	s.busy = make(map[string]*runner.Process)
+	s.mu.Unlock()
+
+	for _, proc := range allProcs {
+		stopErr := s.process.Stop(ctx, proc)
+		if stopErr != nil {
+			s.logger.WarnContext(ctx, "failed to stop runner during shutdown",
+				"runner", proc.Name,
+				"error", stopErr,
+			)
+		}
+		cleanupErr := s.process.Cleanup(proc)
+		if cleanupErr != nil {
+			s.logger.WarnContext(ctx, "failed to cleanup runner during shutdown",
+				"runner", proc.Name,
+				"error", cleanupErr,
+			)
+		}
+	}
+}
+
+func (s *MacOSScaler) Snapshots() []model.RunnerSnapshot {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	snapshots := make([]model.RunnerSnapshot, 0, len(s.idle)+len(s.busy))
+	for name, proc := range s.idle {
+		snapshots = append(snapshots, model.RunnerSnapshot{
+			Name:  name,
+			Group: s.groupName,
+			State: "idle",
+			PID:   proc.PID,
+		})
+	}
+	for name, proc := range s.busy {
+		snapshots = append(snapshots, model.RunnerSnapshot{
+			Name:  name,
+			Group: s.groupName,
+			State: "busy",
+			PID:   proc.PID,
+		})
+	}
+	return snapshots
+}
