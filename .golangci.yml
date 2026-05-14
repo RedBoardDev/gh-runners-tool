@@ -77,3 +77,7 @@ linters:
           - gocritic
         text: "hugeParam: r is heavy"
         path: internal/logging/handler\.go
+      - linters:
+          - gocritic
+        text: "filepathJoin"
+        path: internal/launchd/

@@ -92,7 +92,7 @@ func (u *UptimeKuma) push(ctx context.Context, token, status, msg string, ping f
 	return nil
 }
 
-func groupStatus(actual, desired int, threshold float64) (status string, msg string) {
+func groupStatus(actual, desired int, threshold float64) (status, msg string) {
 	if desired == 0 {
 		return "up", "idle (0 desired)"
 	}

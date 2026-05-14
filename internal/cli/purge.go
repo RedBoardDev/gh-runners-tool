@@ -28,7 +28,7 @@ func newPurgeCmd() *cobra.Command {
 	return cmd
 }
 
-func runPurge(cmd *cobra.Command, args []string) error {
+func runPurge(cmd *cobra.Command, _ []string) error {
 	if cfgFile == "" {
 		return fmt.Errorf("--config is required")
 	}

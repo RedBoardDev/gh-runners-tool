@@ -25,7 +25,7 @@ func (s *Server) routes() http.Handler {
 	return mux
 }
 
-func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleStatus(w http.ResponseWriter, _ *http.Request) {
 	snapshots := s.controller.Snapshots()
 	hs := s.health.Status()
 
@@ -40,7 +40,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, resp)
 }
 
-func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	hs := s.health.Status()
 
 	resp := healthResponse{
