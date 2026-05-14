@@ -128,6 +128,12 @@ func buildNotificationService(cfg *config.Config, logger *slog.Logger) *notifica
 func buildReporters(cfg *config.Config, logger *slog.Logger) []health.Reporter {
 	var reporters []health.Reporter
 
+	logger.Debug("uptime-kuma config",
+		"enabled", cfg.Monitoring.UptimeKuma.Enabled,
+		"base_url_set", cfg.Monitoring.UptimeKuma.BaseURL != "",
+		"daemon_token_set", cfg.Monitoring.UptimeKuma.DaemonToken != "",
+		"group_tokens", len(cfg.Monitoring.UptimeKuma.GroupTokens),
+	)
 	if cfg.Monitoring.UptimeKuma.Enabled && cfg.Monitoring.UptimeKuma.BaseURL != "" {
 		reporters = append(reporters, monitoring.NewUptimeKuma(monitoring.UptimeKumaConfig{
 			BaseURL:            cfg.Monitoring.UptimeKuma.BaseURL,
