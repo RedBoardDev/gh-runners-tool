@@ -22,6 +22,10 @@ type Reporter interface {
 	ReportGroupHealth(ctx context.Context, group string, actual int, desired int)
 }
 
+type RunnerKiller interface {
+	KillRunner(ctx context.Context, group string, runner string) error
+}
+
 type MonitorConfig struct {
 	Enabled                bool
 	CheckInterval          time.Duration
@@ -39,19 +43,30 @@ type Monitor struct {
 	notifier  Notifier
 	runners   RunnerStateProvider
 	reporters []Reporter
+	killer    RunnerKiller
 
 	mu        sync.RWMutex
 	lastCheck time.Time
 	issues    []model.HealthIssue
+	groups    map[string]*groupState
 }
 
-func NewMonitor(cfg MonitorConfig, notifier Notifier, runners RunnerStateProvider, reporters []Reporter, logger *slog.Logger) *Monitor {
+func NewMonitor(
+	cfg MonitorConfig,
+	notifier Notifier,
+	runners RunnerStateProvider,
+	reporters []Reporter,
+	killer RunnerKiller,
+	logger *slog.Logger,
+) *Monitor {
 	return &Monitor{
 		cfg:       cfg,
 		logger:    logger,
 		notifier:  notifier,
 		runners:   runners,
 		reporters: reporters,
+		killer:    killer,
+		groups:    make(map[string]*groupState),
 	}
 }
 

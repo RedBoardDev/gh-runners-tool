@@ -22,10 +22,14 @@ func (m *Monitor) runChecks(ctx context.Context) {
 	totalDesired := 0
 
 	for group, snaps := range snapshots {
-		m.checkRunnerLiveness(group, snaps)
-		m.checkRunnerTimeouts(group, snaps)
+		m.checkRunnerLiveness(ctx, group, snaps)
+		m.checkRunnerTimeouts(ctx, group, snaps)
+		m.checkIdleTimeouts(group, snaps)
+		gs := m.getOrCreateGroup(group)
+		m.checkGroupDivergence(group, len(snaps), gs)
+		m.checkConsecutiveFailures(group, gs)
 		totalActual += len(snaps)
-		totalDesired += len(snaps)
+		totalDesired += gs.lastDesiredCount
 	}
 
 	m.checkDiskSpace()
@@ -36,14 +40,15 @@ func (m *Monitor) runChecks(ctx context.Context) {
 		r.ReportDaemonHealth(ctx, len(snapshots), totalActual, totalDesired, checkDuration)
 	}
 	for group, snaps := range snapshots {
+		gs := m.getOrCreateGroup(group)
 		for _, r := range m.reporters {
-			r.ReportGroupHealth(ctx, group, len(snaps), len(snaps))
+			r.ReportGroupHealth(ctx, group, len(snaps), gs.lastDesiredCount)
 		}
 	}
 
 	for _, issue := range m.issues {
 		m.notifier.Notify(ctx, model.Event{
-			Type:      fmt.Sprintf("health.%s", issue.Type),
+			Type:      issue.Type,
 			Level:     issue.Level,
 			Group:     issue.Group,
 			Runner:    issue.Runner,
@@ -53,7 +58,7 @@ func (m *Monitor) runChecks(ctx context.Context) {
 	}
 }
 
-func (m *Monitor) checkRunnerLiveness(group string, snapshots []model.RunnerSnapshot) {
+func (m *Monitor) checkRunnerLiveness(ctx context.Context, group string, snapshots []model.RunnerSnapshot) {
 	for _, snap := range snapshots {
 		if snap.PID <= 0 {
 			continue
@@ -61,17 +66,22 @@ func (m *Monitor) checkRunnerLiveness(group string, snapshots []model.RunnerSnap
 		if err := syscall.Kill(snap.PID, 0); err != nil {
 			m.issues = append(m.issues, model.HealthIssue{
 				Level:      model.LevelError,
-				Type:       "zombie_runner",
+				Type:       model.EventHealthZombieRunner,
 				Group:      group,
 				Runner:     snap.Name,
 				Message:    fmt.Sprintf("runner %s (pid %d) is no longer alive", snap.Name, snap.PID),
 				DetectedAt: time.Now(),
 			})
+			if m.killer != nil {
+				if killErr := m.killer.KillRunner(ctx, group, snap.Name); killErr != nil {
+					m.logger.ErrorContext(ctx, "failed to kill zombie runner", "group", group, "runner", snap.Name, "error", killErr)
+				}
+			}
 		}
 	}
 }
 
-func (m *Monitor) checkRunnerTimeouts(group string, snapshots []model.RunnerSnapshot) {
+func (m *Monitor) checkRunnerTimeouts(ctx context.Context, group string, snapshots []model.RunnerSnapshot) {
 	if m.cfg.RunnerTimeout <= 0 {
 		return
 	}
@@ -84,39 +94,97 @@ func (m *Monitor) checkRunnerTimeouts(group string, snapshots []model.RunnerSnap
 		if snap.StartedAt.IsZero() {
 			continue
 		}
-		if now.Sub(snap.StartedAt) > m.cfg.RunnerTimeout {
-			m.issues = append(m.issues, model.HealthIssue{
-				Level:      model.LevelWarning,
-				Type:       "runner_timeout",
-				Group:      group,
-				Runner:     snap.Name,
-				Message:    fmt.Sprintf("runner %s has been busy for %s (timeout: %s)", snap.Name, now.Sub(snap.StartedAt).Round(time.Second), m.cfg.RunnerTimeout),
-				DetectedAt: now,
-			})
+		if now.Sub(snap.StartedAt) <= m.cfg.RunnerTimeout {
+			continue
+		}
+		m.issues = append(m.issues, model.HealthIssue{
+			Level:      model.LevelWarning,
+			Type:       model.EventHealthRunnerTimeout,
+			Group:      group,
+			Runner:     snap.Name,
+			Message:    fmt.Sprintf("runner %s has been busy for %s (timeout: %s)", snap.Name, now.Sub(snap.StartedAt).Round(time.Second), m.cfg.RunnerTimeout),
+			DetectedAt: now,
+		})
+		if m.killer != nil {
+			if killErr := m.killer.KillRunner(ctx, group, snap.Name); killErr != nil {
+				m.logger.ErrorContext(ctx, "failed to kill timed-out runner", "group", group, "runner", snap.Name, "error", killErr)
+			}
 		}
 	}
 }
 
-func (m *Monitor) checkDiskSpace() {
-	if m.cfg.MinDiskSpace <= 0 {
+func (m *Monitor) checkIdleTimeouts(group string, snapshots []model.RunnerSnapshot) {
+	if m.cfg.IdleTimeout <= 0 {
 		return
 	}
 
-	var stat syscall.Statfs_t
-	if err := syscall.Statfs("/", &stat); err != nil {
-		m.logger.Warn("failed to check disk space", "error", err)
-		return
-	}
-
-	available := int64(stat.Bavail) * int64(stat.Bsize)
-	if available < m.cfg.MinDiskSpace {
+	now := time.Now()
+	for _, snap := range snapshots {
+		if snap.State != "idle" {
+			continue
+		}
+		if snap.StartedAt.IsZero() {
+			continue
+		}
+		if now.Sub(snap.StartedAt) <= m.cfg.IdleTimeout {
+			continue
+		}
 		m.issues = append(m.issues, model.HealthIssue{
 			Level:      model.LevelWarning,
-			Type:       "disk_low",
-			Group:      "",
-			Runner:     "",
-			Message:    fmt.Sprintf("available disk space %d bytes is below minimum %d bytes", available, m.cfg.MinDiskSpace),
-			DetectedAt: time.Now(),
+			Type:       model.EventHealthIdleTimeout,
+			Group:      group,
+			Runner:     snap.Name,
+			Message:    fmt.Sprintf("runner %s has been idle for %s (timeout: %s)", snap.Name, now.Sub(snap.StartedAt).Round(time.Second), m.cfg.IdleTimeout),
+			DetectedAt: now,
 		})
 	}
+}
+
+func (m *Monitor) checkGroupDivergence(group string, actualCount int, gs *groupState) {
+	if m.cfg.DivergenceTimeout <= 0 {
+		return
+	}
+	if gs.lastDesiredCount == 0 {
+		return
+	}
+
+	if actualCount == gs.lastDesiredCount {
+		gs.degradedSince = nil
+		return
+	}
+
+	now := time.Now()
+	if gs.degradedSince == nil {
+		gs.degradedSince = &now
+		return
+	}
+
+	if now.Sub(*gs.degradedSince) < m.cfg.DivergenceTimeout {
+		return
+	}
+
+	m.issues = append(m.issues, model.HealthIssue{
+		Level:      model.LevelWarning,
+		Type:       model.EventHealthGroupDegraded,
+		Group:      group,
+		Message:    fmt.Sprintf("group %s has %d runners but %d desired for %s", group, actualCount, gs.lastDesiredCount, now.Sub(*gs.degradedSince).Round(time.Second)),
+		DetectedAt: now,
+	})
+}
+
+func (m *Monitor) checkConsecutiveFailures(group string, gs *groupState) {
+	if m.cfg.MaxConsecutiveFailures <= 0 {
+		return
+	}
+	if gs.consecutiveFailures <= m.cfg.MaxConsecutiveFailures {
+		return
+	}
+
+	m.issues = append(m.issues, model.HealthIssue{
+		Level:      model.LevelCritical,
+		Type:       model.EventHealthGroupFailing,
+		Group:      group,
+		Message:    fmt.Sprintf("group %s has %d consecutive start failures (threshold: %d)", group, gs.consecutiveFailures, m.cfg.MaxConsecutiveFailures),
+		DetectedAt: time.Now(),
+	})
 }

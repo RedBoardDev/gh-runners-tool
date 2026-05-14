@@ -1,6 +1,7 @@
 package logging
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log/slog"
@@ -8,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 )
 
 type LogManager struct {
@@ -134,6 +136,22 @@ func (m *LogManager) RunnerOutputFile(group, runner string) (io.WriteCloser, err
 	}
 	m.trackWriter(w)
 	return w, nil
+}
+
+func (m *LogManager) StartCleanupScheduler(ctx context.Context) error {
+	ticker := time.NewTicker(24 * time.Hour)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+			if err := m.CleanupOldLogs(); err != nil {
+				fmt.Fprintf(os.Stderr, "log cleanup error: %v\n", err)
+			}
+		}
+	}
 }
 
 func (m *LogManager) CleanupOldLogs() error {

@@ -64,6 +64,11 @@ func runRun(cmd *cobra.Command, args []string) error {
 	}
 	defer removePIDFile(pidPath)
 
+	if err := writeDaemonState(cfg.Daemon.StateDir, cfgFile); err != nil {
+		return fmt.Errorf("write daemon state: %w", err)
+	}
+	defer removeDaemonState(cfg.Daemon.StateDir)
+
 	return runDaemonGroup(d)
 }
 
@@ -90,6 +95,14 @@ func runDaemonGroup(d *daemon) error {
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(
 			func() error { return d.api.Run(ctx) },
+			func(error) { cancel() },
+		)
+	}
+
+	{
+		ctx, cancel := context.WithCancel(context.Background())
+		g.Add(
+			func() error { return d.logMgr.StartCleanupScheduler(ctx) },
 			func(error) { cancel() },
 		)
 	}

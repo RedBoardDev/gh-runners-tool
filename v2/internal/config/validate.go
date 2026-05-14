@@ -55,6 +55,12 @@ func validate(cfg *Config) error {
 		errs = append(errs, fmt.Errorf("daemon.shutdown_timeout must be >= 5s, got %s", cfg.Daemon.ShutdownTimeout.Duration))
 	}
 
+	if cfg.Health.MinDiskSpace != "" {
+		if _, parseErr := ParseByteSize(cfg.Health.MinDiskSpace); parseErr != nil {
+			errs = append(errs, fmt.Errorf("health.min_disk_space: %w", parseErr))
+		}
+	}
+
 	switch cfg.Logging.Level {
 	case "debug", "info", "warn", "error":
 	default:

@@ -103,7 +103,7 @@ func (s *MacOSScaler) HandleJobStarted(ctx context.Context, jobInfo *scaleset.Jo
 	)
 
 	s.notifier.Notify(ctx, model.Event{
-		Type:      "runner.started",
+		Type:      model.EventRunnerStarted,
 		Level:     model.LevelInfo,
 		Group:     s.groupName,
 		Runner:    jobInfo.RunnerName,
@@ -146,16 +146,24 @@ func (s *MacOSScaler) HandleJobCompleted(ctx context.Context, jobInfo *scaleset.
 		)
 	}
 
-	eventType := "runner.completed"
+	eventType := model.EventRunnerCompleted
 	if jobInfo.Result != "succeeded" {
-		eventType = "runner.failed"
+		eventType = model.EventRunnerFailed
 	}
 
-	s.logger.InfoContext(ctx, "job completed",
+	logArgs := []any{
 		"runner", jobInfo.RunnerName,
 		"group", s.groupName,
 		"result", jobInfo.Result,
-	)
+	}
+	if !jobInfo.FinishTime.IsZero() && !jobInfo.RunnerAssignTime.IsZero() {
+		logArgs = append(logArgs, "duration", jobInfo.FinishTime.Sub(jobInfo.RunnerAssignTime).String())
+	}
+	if !jobInfo.QueueTime.IsZero() && !jobInfo.RunnerAssignTime.IsZero() {
+		logArgs = append(logArgs, "queue_wait", jobInfo.RunnerAssignTime.Sub(jobInfo.QueueTime).String())
+	}
+
+	s.logger.InfoContext(ctx, "job completed", logArgs...)
 
 	s.notifier.Notify(ctx, model.Event{
 		Type:      eventType,

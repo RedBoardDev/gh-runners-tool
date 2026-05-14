@@ -19,6 +19,13 @@ func newRestartCmd() *cobra.Command {
 }
 
 func runRestart(cmd *cobra.Command, args []string) error {
+	if cfgFile == "" {
+		stateDir := resolveStateDir()
+		if state, err := readDaemonState(stateDir); err == nil && state.ConfigPath != "" {
+			cfgFile = state.ConfigPath
+		}
+	}
+
 	label := launchd.DefaultLabel()
 	if launchd.IsRunning(label) {
 		pid, _ := launchd.Status(label)

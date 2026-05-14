@@ -55,6 +55,37 @@ func (s *MacOSScaler) startRunner(ctx context.Context) error {
 	return nil
 }
 
+func (s *MacOSScaler) killRunner(ctx context.Context, runnerName string) error {
+	s.mu.Lock()
+	proc := s.idle[runnerName]
+	if proc == nil {
+		proc = s.busy[runnerName]
+	}
+	delete(s.idle, runnerName)
+	delete(s.busy, runnerName)
+	s.mu.Unlock()
+
+	if proc == nil {
+		return fmt.Errorf("runner %q not found in group %q", runnerName, s.groupName)
+	}
+
+	stopErr := s.process.Stop(ctx, proc)
+	if stopErr != nil {
+		s.logger.WarnContext(ctx, "failed to stop runner during kill",
+			"runner", runnerName,
+			"error", stopErr,
+		)
+	}
+
+	cleanupErr := s.process.Cleanup(proc)
+	if cleanupErr != nil {
+		return fmt.Errorf("cleanup runner %q: %w", runnerName, cleanupErr)
+	}
+
+	s.logger.InfoContext(ctx, "killed runner", "runner", runnerName, "group", s.groupName)
+	return nil
+}
+
 func (s *MacOSScaler) Shutdown(ctx context.Context) {
 	s.mu.Lock()
 	allProcs := make([]*runner.Process, 0, len(s.idle)+len(s.busy))
@@ -93,18 +124,20 @@ func (s *MacOSScaler) Snapshots() []model.RunnerSnapshot {
 	snapshots := make([]model.RunnerSnapshot, 0, len(s.idle)+len(s.busy))
 	for name, proc := range s.idle {
 		snapshots = append(snapshots, model.RunnerSnapshot{
-			Name:  name,
-			Group: s.groupName,
-			State: "idle",
-			PID:   proc.PID,
+			Name:      name,
+			Group:     s.groupName,
+			State:     "idle",
+			PID:       proc.PID,
+			StartedAt: proc.StartedAt,
 		})
 	}
 	for name, proc := range s.busy {
 		snapshots = append(snapshots, model.RunnerSnapshot{
-			Name:  name,
-			Group: s.groupName,
-			State: "busy",
-			PID:   proc.PID,
+			Name:      name,
+			Group:     s.groupName,
+			State:     "busy",
+			PID:       proc.PID,
+			StartedAt: proc.StartedAt,
 		})
 	}
 	return snapshots

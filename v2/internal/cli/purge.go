@@ -33,6 +33,16 @@ func runPurge(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("--config is required")
 	}
 
+	timeout, err := cmd.Flags().GetDuration("timeout")
+	if err != nil {
+		return fmt.Errorf("get timeout flag: %w", err)
+	}
+
+	force, err := cmd.Flags().GetBool("force")
+	if err != nil {
+		return fmt.Errorf("get force flag: %w", err)
+	}
+
 	stopDaemonIfRunning()
 
 	cfg, err := config.Load(cfgFile)
@@ -56,7 +66,7 @@ func runPurge(cmd *cobra.Command, args []string) error {
 	}
 
 	ctx := context.Background()
-	deletedSets := purgeScaleSets(ctx, ghClient, cfg)
+	deletedSets := purgeScaleSets(ctx, ghClient, cfg, force, timeout)
 	cleanedDirs := cleanupWorkdirs(cfg.Runner.WorkdirBase)
 	cleanupStateFiles(cfg.Daemon.StateDir)
 
@@ -85,7 +95,7 @@ func stopDaemonIfRunning() {
 	}
 }
 
-func purgeScaleSets(ctx context.Context, ghClient *github.Client, cfg *config.Config) int {
+func purgeScaleSets(ctx context.Context, ghClient *github.Client, cfg *config.Config, force bool, timeout time.Duration) int {
 	deletedSets := 0
 	for _, g := range cfg.Groups {
 		fmt.Printf("purging scale set %q...\n", g.Name)
@@ -97,6 +107,11 @@ func purgeScaleSets(ctx context.Context, ghClient *github.Client, cfg *config.Co
 		if ss == nil {
 			continue
 		}
+
+		if !force {
+			waitForIdleRunners(ctx, ghClient, ss.ID, g.Name, timeout)
+		}
+
 		if delErr := ghClient.DeleteScaleSet(ctx, ss.ID); delErr != nil {
 			fmt.Printf("  failed to delete scale set %q: %v\n", g.Name, delErr)
 			continue
@@ -105,6 +120,33 @@ func purgeScaleSets(ctx context.Context, ghClient *github.Client, cfg *config.Co
 		fmt.Printf("  deleted scale set %q (id=%d)\n", g.Name, ss.ID)
 	}
 	return deletedSets
+}
+
+func waitForIdleRunners(ctx context.Context, ghClient *github.Client, scaleSetID int, name string, timeout time.Duration) {
+	deadline := time.Now().Add(timeout)
+	pollInterval := 5 * time.Second
+
+	for time.Now().Before(deadline) {
+		ss, err := ghClient.GetScaleSetByID(ctx, scaleSetID)
+		if err != nil {
+			fmt.Printf("  warning: cannot check scale set %q status: %v\n", name, err)
+			return
+		}
+
+		if ss.Statistics == nil || ss.Statistics.TotalBusyRunners == 0 {
+			return
+		}
+
+		fmt.Printf("  waiting for %d busy runners in %q...\n", ss.Statistics.TotalBusyRunners, name)
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(pollInterval):
+		}
+	}
+
+	fmt.Printf("  timeout waiting for idle runners in %q, proceeding with delete\n", name)
 }
 
 func cleanupWorkdirs(workdirBase string) int {

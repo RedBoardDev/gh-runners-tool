@@ -93,6 +93,14 @@ func (c *Client) GetScaleSet(ctx context.Context, runnerGroupID int, name string
 	return ss, nil
 }
 
+func (c *Client) GetScaleSetByID(ctx context.Context, id int) (*scaleset.RunnerScaleSet, error) {
+	ss, err := c.inner.GetRunnerScaleSetByID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("get scale set by id %d: %w", id, err)
+	}
+	return ss, nil
+}
+
 func (c *Client) DeleteScaleSet(ctx context.Context, id int) error {
 	if err := c.inner.DeleteRunnerScaleSet(ctx, id); err != nil {
 		return fmt.Errorf("delete scale set %d: %w", id, err)

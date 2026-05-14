@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
@@ -59,6 +60,10 @@ func buildDaemon(cfg *config.Config, creds *auth.Credentials, githubURL string) 
 	binaryMgr := runner.NewBinaryManager(cfg.Runner.CacheDir, logger)
 	processMgr := runner.NewProcessManager(cfg.Runner.WorkdirBase, logger)
 
+	if err := processMgr.CleanupStale(context.Background()); err != nil {
+		logger.Warn("stale runner cleanup failed", "error", err)
+	}
+
 	notifSvc := buildNotificationService(cfg, logger)
 	reporters := buildReporters(cfg, logger)
 
@@ -70,6 +75,11 @@ func buildDaemon(cfg *config.Config, creds *auth.Credentials, githubURL string) 
 		}, logger,
 	)
 
+	var minDiskSpace int64
+	if cfg.Health.MinDiskSpace != "" {
+		minDiskSpace, _ = config.ParseByteSize(cfg.Health.MinDiskSpace)
+	}
+
 	healthMon := health.NewMonitor(health.MonitorConfig{
 		Enabled:                cfg.Health.Enabled,
 		CheckInterval:          cfg.Health.CheckInterval.Duration,
@@ -78,7 +88,8 @@ func buildDaemon(cfg *config.Config, creds *auth.Credentials, githubURL string) 
 		DivergenceTimeout:      cfg.Health.DivergenceTimeout.Duration,
 		MaxConsecutiveFailures: cfg.Health.MaxConsecutiveFailures,
 		FailureCooldown:        cfg.Health.FailureCooldown.Duration,
-	}, notifSvc, ctrl, reporters, logger)
+		MinDiskSpace:           minDiskSpace,
+	}, notifSvc, ctrl, reporters, ctrl, logger)
 
 	apiServer := api.NewServer(cfg.Daemon.StateDir, ctrl, healthMon, logger)
 
@@ -100,6 +111,7 @@ func buildNotificationService(cfg *config.Config, logger *slog.Logger) *notifica
 		providers = append(providers, notification.NewDiscord(notification.DiscordConfig{
 			WebhookURL: cfg.Notifications.Discord.WebhookURL,
 			Username:   cfg.Notifications.Discord.Username,
+			AvatarURL:  cfg.Notifications.Discord.AvatarURL,
 			Mentions: notification.DiscordMentions{
 				Error:    cfg.Notifications.Discord.Mentions.Error,
 				Critical: cfg.Notifications.Discord.Mentions.Critical,
@@ -119,6 +131,8 @@ func buildReporters(cfg *config.Config, logger *slog.Logger) []health.Reporter {
 	if cfg.Monitoring.UptimeKuma.Enabled && cfg.Monitoring.UptimeKuma.BaseURL != "" {
 		reporters = append(reporters, monitoring.NewUptimeKuma(monitoring.UptimeKumaConfig{
 			BaseURL:            cfg.Monitoring.UptimeKuma.BaseURL,
+			DaemonToken:        cfg.Monitoring.UptimeKuma.DaemonToken,
+			GroupTokens:        cfg.Monitoring.UptimeKuma.GroupTokens,
 			DegradedThreshold:  cfg.Monitoring.UptimeKuma.DegradedThreshold,
 			ReportHealthAsPing: cfg.Monitoring.UptimeKuma.ReportHealthAsPing,
 		}, logger))

@@ -19,11 +19,12 @@ import (
 const stopGracePeriod = 10 * time.Second
 
 type Process struct {
-	Name    string
-	Group   string
-	WorkDir string
-	PID     int
-	Cmd     *exec.Cmd
+	Name      string
+	Group     string
+	WorkDir   string
+	PID       int
+	StartedAt time.Time
+	Cmd       *exec.Cmd
 }
 
 type ProcessManager struct {
@@ -73,11 +74,12 @@ func (m *ProcessManager) Start(ctx context.Context, instance model.RunnerInstanc
 	m.logger.InfoContext(ctx, "runner started", "runner", instance.Name, "pid", cmd.Process.Pid)
 
 	return &Process{
-		Name:    instance.Name,
-		Group:   instance.Group,
-		WorkDir: workdir,
-		PID:     cmd.Process.Pid,
-		Cmd:     cmd,
+		Name:      instance.Name,
+		Group:     instance.Group,
+		WorkDir:   workdir,
+		PID:       cmd.Process.Pid,
+		StartedAt: time.Now(),
+		Cmd:       cmd,
 	}, nil
 }
 

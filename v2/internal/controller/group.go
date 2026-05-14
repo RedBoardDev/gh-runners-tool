@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/config"
+	"github.com/actions/scaleset"
 )
 
 const (
@@ -78,6 +79,15 @@ func (c *GroupController) runGroupOnce(
 	if err != nil {
 		return fmt.Errorf("open session for %q: %w", group.Name, err)
 	}
+	defer func() {
+		closeCtx := context.WithoutCancel(ctx)
+		if closeErr := session.Close(closeCtx); closeErr != nil {
+			groupLogger.WarnContext(ctx, "failed to close session",
+				"group", group.Name,
+				"error", closeErr,
+			)
+		}
+	}()
 
 	scaler := NewMacOSScaler(
 		c.client, c.process, c.logMgr, c.notifier,
@@ -121,6 +131,12 @@ func (c *GroupController) runGroupOnce(
 func (c *GroupController) resolveScaleSet(ctx context.Context, name string, labels []string) (*resolvedScaleSet, error) {
 	ss, err := c.client.GetScaleSet(ctx, c.globalCfg.RunnerGroupID, name)
 	if err == nil && ss != nil {
+		if labelsChanged(ss.Labels, labels) {
+			c.logger.WarnContext(ctx, "scale set label mismatch detected, delete and recreate to update",
+				"group", name,
+				"scale_set_id", ss.ID,
+			)
+		}
 		return &resolvedScaleSet{ID: ss.ID, Name: ss.Name}, nil
 	}
 
@@ -129,6 +145,22 @@ func (c *GroupController) resolveScaleSet(ctx context.Context, name string, labe
 		return nil, fmt.Errorf("create scale set %q: %w", name, err)
 	}
 	return &resolvedScaleSet{ID: ss.ID, Name: ss.Name}, nil
+}
+
+func labelsChanged(existing []scaleset.Label, desired []string) bool {
+	if len(existing) != len(desired) {
+		return true
+	}
+	have := make(map[string]struct{}, len(existing))
+	for _, l := range existing {
+		have[l.Name] = struct{}{}
+	}
+	for _, d := range desired {
+		if _, ok := have[d]; !ok {
+			return true
+		}
+	}
+	return false
 }
 
 type resolvedScaleSet struct {

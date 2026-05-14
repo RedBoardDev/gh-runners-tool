@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -122,5 +123,24 @@ func resolveEnvVars(cfg *Config) {
 	}
 	if v := os.Getenv("GHR_UPTIME_KUMA_URL"); v != "" {
 		cfg.Monitoring.UptimeKuma.BaseURL = v
+	}
+	if v := os.Getenv("GHR_UPTIME_KUMA_DAEMON_TOKEN"); v != "" {
+		cfg.Monitoring.UptimeKuma.DaemonToken = v
+	}
+	resolveUptimeKumaGroupTokens(cfg)
+}
+
+func resolveUptimeKumaGroupTokens(cfg *Config) {
+	if len(cfg.Groups) == 0 {
+		return
+	}
+	if cfg.Monitoring.UptimeKuma.GroupTokens == nil {
+		cfg.Monitoring.UptimeKuma.GroupTokens = make(map[string]string, len(cfg.Groups))
+	}
+	for _, g := range cfg.Groups {
+		envKey := "GHR_UPTIME_KUMA_TOKEN_" + strings.ToUpper(strings.ReplaceAll(g.Name, "-", "_"))
+		if v := os.Getenv(envKey); v != "" {
+			cfg.Monitoring.UptimeKuma.GroupTokens[g.Name] = v
+		}
 	}
 }

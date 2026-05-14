@@ -69,6 +69,7 @@ type DiscordConfig struct {
 	WebhookURL string   `yaml:"-"`
 	Events     []string `yaml:"events"`
 	Username   string   `yaml:"username"`
+	AvatarURL  string   `yaml:"avatar_url"`
 	Mentions   struct {
 		Error    string `yaml:"error"`
 		Critical string `yaml:"critical"`
@@ -80,10 +81,12 @@ type MonitoringConfig struct {
 }
 
 type UptimeKumaConfig struct {
-	Enabled            bool    `yaml:"enabled"`
-	BaseURL            string  `yaml:"-"`
-	DegradedThreshold  float64 `yaml:"degraded_threshold"`
-	ReportHealthAsPing bool    `yaml:"report_health_as_ping"`
+	Enabled            bool              `yaml:"enabled"`
+	BaseURL            string            `yaml:"-"`
+	DaemonToken        string            `yaml:"-"`
+	GroupTokens        map[string]string `yaml:"-"`
+	DegradedThreshold  float64           `yaml:"degraded_threshold"`
+	ReportHealthAsPing bool              `yaml:"report_health_as_ping"`
 }
 
 type DaemonConfig struct {

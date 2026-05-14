@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"sync"
 
@@ -121,6 +122,18 @@ func (c *GroupController) Snapshots() map[string][]model.RunnerSnapshot {
 		result[name] = s.Snapshots()
 	}
 	return result
+}
+
+func (c *GroupController) KillRunner(ctx context.Context, group string, runner string) error {
+	c.mu.Lock()
+	s, ok := c.scalers[group]
+	c.mu.Unlock()
+
+	if !ok {
+		return fmt.Errorf("kill runner %s: group %q not found", runner, group)
+	}
+
+	return s.killRunner(ctx, runner)
 }
 
 func (c *GroupController) registerScaler(name string, s *MacOSScaler) {
