@@ -1,11 +1,14 @@
 package cli
 
 import (
+	"context"
 	"fmt"
+	"os/signal"
+	"syscall"
 
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/auth"
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/config"
-	"github.com/RedBoardDev/gh-runners-tool/v2/internal/logging"
+	"github.com/oklog/run"
 	"github.com/spf13/cobra"
 )
 
@@ -33,44 +36,81 @@ func runRun(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	githubURL, err := resolveGitHubURL(creds, cfg)
+	if err != nil {
+		return err
+	}
+
 	if logLevel != "" {
 		cfg.Logging.Level = logLevel
 	}
 
-	logMgr, err := logging.New(logging.LogConfig{
-		Level:         cfg.Logging.Level,
-		Format:        cfg.Logging.Format,
-		Dir:           cfg.Logging.Dir,
-		RetentionDays: cfg.Logging.RetentionDays,
-		RunnerOutput:  cfg.Logging.RunnerOutput != nil && *cfg.Logging.RunnerOutput,
-	})
+	d, err := buildDaemon(cfg, creds, githubURL)
 	if err != nil {
-		return fmt.Errorf("setup logging: %w", err)
+		return err
 	}
-	defer logMgr.Close()
+	defer d.logMgr.Close()
 
-	logger, err := logMgr.DaemonLogger()
-	if err != nil {
-		return fmt.Errorf("create daemon logger: %w", err)
-	}
-
-	logger.Info("ghr starting",
+	d.logger.Info("ghr starting",
 		"config", cfgFile,
 		"groups", len(cfg.Groups),
 		"auth_source", source,
 		"auth_method", creds.Method,
 	)
 
-	if err := logMgr.CleanupOldLogs(); err != nil {
-		logger.Warn("log cleanup failed", "error", err)
+	pidPath := pidFilePath(cfg.Daemon.StateDir)
+	if err := writePIDFile(pidPath); err != nil {
+		return fmt.Errorf("write pid file: %w", err)
+	}
+	defer removePIDFile(pidPath)
+
+	return runDaemonGroup(d)
+}
+
+func runDaemonGroup(d *daemon) error {
+	var g run.Group
+
+	{
+		ctx, cancel := context.WithCancel(context.Background())
+		g.Add(
+			func() error { return d.ctrl.Run(ctx) },
+			func(error) { cancel() },
+		)
 	}
 
-	logger.Info("ghr daemon: not yet fully implemented, would start here",
-		"groups_count", len(cfg.Groups),
-	)
+	{
+		ctx, cancel := context.WithCancel(context.Background())
+		g.Add(
+			func() error { return d.health.Run(ctx) },
+			func(error) { cancel() },
+		)
+	}
 
-	fmt.Printf("ghr run: config loaded (%d groups), auth from %s, daemon not yet implemented\n",
-		len(cfg.Groups), source)
+	{
+		ctx, cancel := context.WithCancel(context.Background())
+		g.Add(
+			func() error { return d.api.Run(ctx) },
+			func(error) { cancel() },
+		)
+	}
 
-	return nil
+	{
+		ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+		g.Add(
+			func() error {
+				<-ctx.Done()
+				return nil
+			},
+			func(error) { cancel() },
+		)
+	}
+
+	groupErr := g.Run()
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), d.cfg.Daemon.ShutdownTimeout.Duration)
+	defer cancel()
+	d.ctrl.Shutdown(shutdownCtx)
+
+	d.logger.Info("ghr stopped")
+	return groupErr
 }

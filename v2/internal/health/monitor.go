@@ -9,15 +9,15 @@ import (
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/model"
 )
 
-type runnerStateProvider interface {
+type RunnerStateProvider interface {
 	Snapshots() map[string][]model.RunnerSnapshot
 }
 
-type notifier interface {
+type Notifier interface {
 	Notify(ctx context.Context, event model.Event)
 }
 
-type reporter interface {
+type Reporter interface {
 	ReportDaemonHealth(ctx context.Context, groups int, totalActual int, totalDesired int, checkDuration time.Duration)
 	ReportGroupHealth(ctx context.Context, group string, actual int, desired int)
 }
@@ -36,16 +36,16 @@ type MonitorConfig struct {
 type Monitor struct {
 	cfg       MonitorConfig
 	logger    *slog.Logger
-	notifier  notifier
-	runners   runnerStateProvider
-	reporters []reporter
+	notifier  Notifier
+	runners   RunnerStateProvider
+	reporters []Reporter
 
 	mu        sync.RWMutex
 	lastCheck time.Time
 	issues    []model.HealthIssue
 }
 
-func NewMonitor(cfg MonitorConfig, notifier notifier, runners runnerStateProvider, reporters []reporter, logger *slog.Logger) *Monitor {
+func NewMonitor(cfg MonitorConfig, notifier Notifier, runners RunnerStateProvider, reporters []Reporter, logger *slog.Logger) *Monitor {
 	return &Monitor{
 		cfg:       cfg,
 		logger:    logger,
