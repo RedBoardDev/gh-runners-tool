@@ -110,7 +110,7 @@ func buildNotificationService(cfg *config.Config, logger *slog.Logger) *notifica
 	filters := make(map[string]notification.EventFilter)
 
 	if cfg.Notifications.Discord.Enabled && cfg.Notifications.Discord.WebhookURL != "" {
-		providers = append(providers, notification.NewDiscord(notification.DiscordConfig{
+		providers = append(providers, notification.NewDiscord(&notification.DiscordConfig{
 			WebhookURL: cfg.Notifications.Discord.WebhookURL,
 			Username:   cfg.Notifications.Discord.Username,
 			AvatarURL:  cfg.Notifications.Discord.AvatarURL,

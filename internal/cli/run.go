@@ -21,7 +21,7 @@ func newRunCmd() *cobra.Command {
 	return cmd
 }
 
-func runRun(cmd *cobra.Command, args []string) error {
+func runRun(_ *cobra.Command, _ []string) error {
 	if cfgFile == "" {
 		return fmt.Errorf("--config is required")
 	}

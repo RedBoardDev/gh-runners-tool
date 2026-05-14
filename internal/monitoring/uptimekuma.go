@@ -34,7 +34,7 @@ func NewUptimeKuma(cfg UptimeKumaConfig, logger *slog.Logger) *UptimeKuma {
 	}
 }
 
-func (u *UptimeKuma) ReportDaemonHealth(ctx context.Context, groups int, totalActual int, totalDesired int, checkDuration time.Duration) {
+func (u *UptimeKuma) ReportDaemonHealth(ctx context.Context, groups, totalActual, totalDesired int, checkDuration time.Duration) {
 	if u.cfg.DaemonToken == "" {
 		return
 	}
@@ -48,7 +48,7 @@ func (u *UptimeKuma) ReportDaemonHealth(ctx context.Context, groups int, totalAc
 	}
 }
 
-func (u *UptimeKuma) ReportGroupHealth(ctx context.Context, group string, actual int, desired int) {
+func (u *UptimeKuma) ReportGroupHealth(ctx context.Context, group string, actual, desired int) {
 	token, ok := u.cfg.GroupTokens[group]
 	if !ok || token == "" {
 		return
@@ -92,7 +92,7 @@ func (u *UptimeKuma) push(ctx context.Context, token, status, msg string, ping f
 	return nil
 }
 
-func groupStatus(actual, desired int, threshold float64) (string, string) {
+func groupStatus(actual, desired int, threshold float64) (status string, msg string) {
 	if desired == 0 {
 		return "up", "idle (0 desired)"
 	}

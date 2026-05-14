@@ -39,7 +39,7 @@ func NewProcessManager(workdirBase string, logger *slog.Logger) *ProcessManager 
 	}
 }
 
-func (m *ProcessManager) Prepare(ctx context.Context, instance model.RunnerInstance, cachedDir string) (string, error) {
+func (m *ProcessManager) Prepare(ctx context.Context, instance *model.RunnerInstance, cachedDir string) (string, error) {
 	workdir := filepath.Join(m.workdirBase, instance.Group, instance.Name)
 
 	if err := os.MkdirAll(workdir, 0o755); err != nil {
@@ -54,7 +54,7 @@ func (m *ProcessManager) Prepare(ctx context.Context, instance model.RunnerInsta
 	return workdir, nil
 }
 
-func (m *ProcessManager) Start(ctx context.Context, instance model.RunnerInstance, workdir string, jitConfig string, logFile io.Writer) (*Process, error) {
+func (m *ProcessManager) Start(ctx context.Context, instance *model.RunnerInstance, workdir, jitConfig string, logFile io.Writer) (*Process, error) {
 	runScript := filepath.Join(workdir, "run.sh")
 	cmd := exec.CommandContext(ctx, runScript)
 	cmd.Dir = workdir

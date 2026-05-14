@@ -28,7 +28,7 @@ func newStatusCmd() *cobra.Command {
 	return cmd
 }
 
-func runStatus(cmd *cobra.Command, args []string) error {
+func runStatus(cmd *cobra.Command, _ []string) error {
 	jsonOutput, err := cmd.Flags().GetBool("json")
 	if err != nil {
 		return fmt.Errorf("get json flag: %w", err)

@@ -38,7 +38,7 @@ func NewWebhook(cfg WebhookConfig) *WebhookProvider {
 
 func (w *WebhookProvider) Name() string { return "webhook" }
 
-func (w *WebhookProvider) Send(ctx context.Context, event model.Event) error {
+func (w *WebhookProvider) Send(ctx context.Context, event *model.Event) error {
 	body, err := json.Marshal(event)
 	if err != nil {
 		return fmt.Errorf("marshal webhook payload: %w", err)

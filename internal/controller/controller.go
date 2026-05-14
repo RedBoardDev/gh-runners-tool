@@ -24,7 +24,7 @@ type scaleSetClient interface {
 }
 
 type notifier interface {
-	Notify(ctx context.Context, event model.Event)
+	Notify(ctx context.Context, event *model.Event)
 }
 
 type ControllerConfig struct {
@@ -124,16 +124,16 @@ func (c *GroupController) Snapshots() map[string][]model.RunnerSnapshot {
 	return result
 }
 
-func (c *GroupController) KillRunner(ctx context.Context, group string, runner string) error {
+func (c *GroupController) KillRunner(ctx context.Context, group, runnerName string) error {
 	c.mu.Lock()
 	s, ok := c.scalers[group]
 	c.mu.Unlock()
 
 	if !ok {
-		return fmt.Errorf("kill runner %s: group %q not found", runner, group)
+		return fmt.Errorf("kill runner %s: group %q not found", runnerName, group)
 	}
 
-	return s.killRunner(ctx, runner)
+	return s.killRunner(ctx, runnerName)
 }
 
 func (c *GroupController) registerScaler(name string, s *MacOSScaler) {

@@ -18,7 +18,7 @@ const downloadURLTemplate = "https://github.com/actions/runner/releases/download
 func downloadAndExtract(ctx context.Context, client *http.Client, version, destDir string) error {
 	url := fmt.Sprintf(downloadURLTemplate, version, runnerArch(), version)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return fmt.Errorf("create download request: %w", err)
 	}

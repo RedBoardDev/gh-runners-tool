@@ -100,7 +100,7 @@ func (m *ProcessManager) KillOrphanRunners(ctx context.Context) {
 			continue
 		}
 		m.logger.WarnContext(ctx, "killing orphan runner process", "pid", pid)
-		_ = syscall.Kill(pid, syscall.SIGKILL) //nolint:errcheck -- best-effort kill
+		_ = syscall.Kill(pid, syscall.SIGKILL)
 	}
 }
 

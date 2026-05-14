@@ -16,8 +16,8 @@ import (
 )
 
 type runnerStarter interface {
-	Prepare(ctx context.Context, instance model.RunnerInstance, cachedDir string) (string, error)
-	Start(ctx context.Context, instance model.RunnerInstance, workdir string, jitConfig string, logFile io.Writer) (*runner.Process, error)
+	Prepare(ctx context.Context, instance *model.RunnerInstance, cachedDir string) (string, error)
+	Start(ctx context.Context, instance *model.RunnerInstance, workdir, jitConfig string, logFile io.Writer) (*runner.Process, error)
 	Stop(ctx context.Context, proc *runner.Process) error
 	Cleanup(proc *runner.Process) error
 }
@@ -111,7 +111,7 @@ func (s *MacOSScaler) HandleJobStarted(ctx context.Context, jobInfo *scaleset.Jo
 		"job", jobInfo.JobDisplayName,
 	)
 
-	s.notifier.Notify(ctx, model.Event{
+	s.notifier.Notify(ctx, &model.Event{
 		Type:      model.EventRunnerStarted,
 		Level:     model.LevelInfo,
 		Group:     s.groupName,
@@ -174,7 +174,7 @@ func (s *MacOSScaler) HandleJobCompleted(ctx context.Context, jobInfo *scaleset.
 
 	s.logger.InfoContext(ctx, "job completed", logArgs...)
 
-	s.notifier.Notify(ctx, model.Event{
+	s.notifier.Notify(ctx, &model.Event{
 		Type:      eventType,
 		Level:     model.LevelInfo,
 		Group:     s.groupName,

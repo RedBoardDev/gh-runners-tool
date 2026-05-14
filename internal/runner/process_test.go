@@ -30,7 +30,7 @@ func TestPrepare(t *testing.T) {
 		Group: "test-group",
 	}
 
-	workdir, err := pm.Prepare(context.Background(), instance, cachedDir)
+	workdir, err := pm.Prepare(context.Background(), &instance, cachedDir)
 	if err != nil {
 		t.Fatalf("Prepare: %v", err)
 	}

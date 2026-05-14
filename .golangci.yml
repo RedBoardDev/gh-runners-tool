@@ -72,3 +72,8 @@ linters:
           - errcheck
           - gocritic
           - unparam
+          - revive
+      - linters:
+          - gocritic
+        text: "hugeParam: r is heavy"
+        path: internal/logging/handler\.go

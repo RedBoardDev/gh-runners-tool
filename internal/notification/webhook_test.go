@@ -47,7 +47,7 @@ func TestWebhookProvider_Send(t *testing.T) {
 		defer srv.Close()
 
 		wp := NewWebhook(WebhookConfig{URL: srv.URL})
-		err := wp.Send(context.Background(), baseEvent)
+		err := wp.Send(context.Background(), &baseEvent)
 		if err != nil {
 			t.Fatalf("Send() error = %v", err)
 		}
@@ -70,7 +70,7 @@ func TestWebhookProvider_Send(t *testing.T) {
 		defer srv.Close()
 
 		wp := NewWebhook(WebhookConfig{URL: srv.URL, Method: http.MethodPut})
-		if err := wp.Send(context.Background(), baseEvent); err != nil {
+		if err := wp.Send(context.Background(), &baseEvent); err != nil {
 			t.Fatalf("Send() error = %v", err)
 		}
 
@@ -93,7 +93,7 @@ func TestWebhookProvider_Send(t *testing.T) {
 			Headers: map[string]string{"Authorization": "Bearer tok123"},
 		})
 
-		if err := wp.Send(context.Background(), baseEvent); err != nil {
+		if err := wp.Send(context.Background(), &baseEvent); err != nil {
 			t.Fatalf("Send() error = %v", err)
 		}
 
@@ -109,7 +109,7 @@ func TestWebhookProvider_Send(t *testing.T) {
 		defer srv.Close()
 
 		wp := NewWebhook(WebhookConfig{URL: srv.URL})
-		err := wp.Send(context.Background(), baseEvent)
+		err := wp.Send(context.Background(), &baseEvent)
 		if err == nil {
 			t.Fatal("expected error for 403")
 		}
@@ -125,7 +125,7 @@ func TestWebhookProvider_Send(t *testing.T) {
 		defer srv.Close()
 
 		wp := NewWebhook(WebhookConfig{URL: srv.URL, Method: ""})
-		if err := wp.Send(context.Background(), baseEvent); err != nil {
+		if err := wp.Send(context.Background(), &baseEvent); err != nil {
 			t.Fatalf("Send() error = %v", err)
 		}
 
@@ -136,7 +136,7 @@ func TestWebhookProvider_Send(t *testing.T) {
 
 	t.Run("connection error returns wrapped error", func(t *testing.T) {
 		wp := NewWebhook(WebhookConfig{URL: "http://127.0.0.1:1"})
-		err := wp.Send(context.Background(), baseEvent)
+		err := wp.Send(context.Background(), &baseEvent)
 		if err == nil {
 			t.Fatal("expected error for unreachable host")
 		}

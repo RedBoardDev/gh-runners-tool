@@ -35,19 +35,19 @@ type DiscordProvider struct {
 	lastSend time.Time
 }
 
-func NewDiscord(cfg DiscordConfig) *DiscordProvider {
+func NewDiscord(cfg *DiscordConfig) *DiscordProvider {
 	return &DiscordProvider{
-		cfg:    cfg,
+		cfg:    *cfg,
 		client: &http.Client{},
 	}
 }
 
 func (d *DiscordProvider) Name() string { return "discord" }
 
-func (d *DiscordProvider) Send(ctx context.Context, event model.Event) error {
+func (d *DiscordProvider) Send(ctx context.Context, event *model.Event) error {
 	d.throttle()
 
-	payload := d.buildPayload(&event)
+	payload := d.buildPayload(event)
 
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -62,7 +62,7 @@ func (d *DiscordProvider) Send(ctx context.Context, event model.Event) error {
 
 	if resp.StatusCode == http.StatusTooManyRequests {
 		retryAfter := parseRetryAfter(resp.Header.Get("Retry-After"))
-		_, _ = io.Copy(io.Discard, resp.Body) //nolint:errcheck -- drain body before retry
+		_, _ = io.Copy(io.Discard, resp.Body)
 		resp.Body.Close()
 
 		select {

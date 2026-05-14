@@ -34,7 +34,7 @@ func validatePAT(ctx context.Context, pat string) (*ValidationResult, error) {
 		return nil, fmt.Errorf("validate PAT: request failed: %w", err)
 	}
 	defer func() {
-		_, _ = io.Copy(io.Discard, resp.Body) //nolint:errcheck -- drain body before close
+		_, _ = io.Copy(io.Discard, resp.Body)
 		resp.Body.Close()
 	}()
 

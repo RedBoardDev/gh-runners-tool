@@ -30,8 +30,8 @@ func PlistPath(label string) string {
 	return filepath.Join(home, "Library", "LaunchAgents", label+".plist")
 }
 
-func Install(cfg ServiceConfig) error {
-	data, err := generatePlist(&cfg)
+func Install(cfg *ServiceConfig) error {
+	data, err := generatePlist(cfg)
 	if err != nil {
 		return fmt.Errorf("generate plist: %w", err)
 	}

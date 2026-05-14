@@ -15,8 +15,8 @@ type noopNotifier struct {
 	events []model.Event
 }
 
-func (n *noopNotifier) Notify(_ context.Context, event model.Event) {
-	n.events = append(n.events, event)
+func (n *noopNotifier) Notify(_ context.Context, event *model.Event) {
+	n.events = append(n.events, *event)
 }
 
 type fakeRunnerState struct {

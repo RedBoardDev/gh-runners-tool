@@ -14,8 +14,8 @@ type mockNotifier struct {
 	events []model.Event
 }
 
-func (m *mockNotifier) Notify(_ context.Context, event model.Event) {
-	m.events = append(m.events, event)
+func (m *mockNotifier) Notify(_ context.Context, event *model.Event) {
+	m.events = append(m.events, *event)
 }
 
 func newTestScaler(opts ...func(*MacOSScaler)) *MacOSScaler {

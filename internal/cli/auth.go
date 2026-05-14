@@ -21,9 +21,9 @@ func newAuthStatusCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
 		Short: "Display current authentication state",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			creds, source, err := auth.Load(auth.LoadOpts{TokenFlag: tokenFlag})
-			if err != nil { //nolint:nilerr -- intentional: show friendly message instead of error
+			if err != nil { //nolint:nilerr
 				fmt.Println("Status:  not authenticated")
 				fmt.Println("Run 'ghr login' to authenticate.")
 				return nil

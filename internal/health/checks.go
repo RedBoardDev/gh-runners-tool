@@ -47,7 +47,7 @@ func (m *Monitor) runChecks(ctx context.Context) {
 	}
 
 	for _, issue := range m.issues {
-		m.notifier.Notify(ctx, model.Event{
+		m.notifier.Notify(ctx, &model.Event{
 			Type:      issue.Type,
 			Level:     issue.Level,
 			Group:     issue.Group,

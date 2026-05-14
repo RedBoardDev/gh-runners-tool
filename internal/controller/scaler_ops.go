@@ -29,7 +29,7 @@ func (s *MacOSScaler) startRunner(ctx context.Context) error {
 		Group: s.groupName,
 	}
 
-	workdir, err := s.process.Prepare(ctx, instance, s.cachedDir)
+	workdir, err := s.process.Prepare(ctx, &instance, s.cachedDir)
 	if err != nil {
 		return fmt.Errorf("prepare runner %q: %w", name, err)
 	}
@@ -39,7 +39,7 @@ func (s *MacOSScaler) startRunner(ctx context.Context) error {
 		return fmt.Errorf("open runner log for %q: %w", name, err)
 	}
 
-	proc, err := s.process.Start(ctx, instance, workdir, jitConfig, logFile)
+	proc, err := s.process.Start(ctx, &instance, workdir, jitConfig, logFile)
 	if err != nil {
 		return fmt.Errorf("start runner %q: %w", name, err)
 	}

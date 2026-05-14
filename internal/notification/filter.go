@@ -6,7 +6,7 @@ type EventFilter struct {
 	Patterns []string
 }
 
-func (f EventFilter) Matches(eventType string, level string) bool {
+func (f EventFilter) Matches(eventType, level string) bool {
 	if len(f.Patterns) == 0 {
 		return true
 	}

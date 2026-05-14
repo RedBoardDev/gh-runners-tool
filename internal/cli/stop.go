@@ -22,7 +22,7 @@ func newStopCmd() *cobra.Command {
 	return cmd
 }
 
-func runStop(cmd *cobra.Command, args []string) error {
+func runStop(cmd *cobra.Command, _ []string) error {
 	timeout, err := cmd.Flags().GetDuration("timeout")
 	if err != nil {
 		return fmt.Errorf("get timeout flag: %w", err)

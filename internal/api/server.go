@@ -30,11 +30,11 @@ type Server struct {
 	listener   net.Listener
 }
 
-func NewServer(stateDir string, controller controllerState, health healthState, logger *slog.Logger) *Server {
+func NewServer(stateDir string, controller controllerState, healthProvider healthState, logger *slog.Logger) *Server {
 	return &Server{
 		socketPath: filepath.Join(stateDir, "ghr.sock"),
 		controller: controller,
-		health:     health,
+		health:     healthProvider,
 		logger:     logger,
 	}
 }

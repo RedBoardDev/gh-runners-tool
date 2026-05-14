@@ -126,7 +126,7 @@ func (c *Client) OpenSession(ctx context.Context, scaleSetID int, owner string) 
 	return session, nil
 }
 
-func (c *Client) NewListener(session *scaleset.MessageSessionClient, scaleSetID int, maxRunners int) (*listener.Listener, error) {
+func (c *Client) NewListener(session *scaleset.MessageSessionClient, scaleSetID, maxRunners int) (*listener.Listener, error) {
 	l, err := listener.New(session, listener.Config{
 		ScaleSetID: scaleSetID,
 		MaxRunners: maxRunners,

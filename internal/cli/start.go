@@ -57,7 +57,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 		StateDir:   cfg.Daemon.StateDir,
 	}
 
-	if err := launchd.Install(svcCfg); err != nil {
+	if err := launchd.Install(&svcCfg); err != nil {
 		return fmt.Errorf("install launchd service: %w", err)
 	}
 

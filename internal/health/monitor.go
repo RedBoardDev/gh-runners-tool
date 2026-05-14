@@ -14,7 +14,7 @@ type RunnerStateProvider interface {
 }
 
 type Notifier interface {
-	Notify(ctx context.Context, event model.Event)
+	Notify(ctx context.Context, event *model.Event)
 }
 
 type Reporter interface {

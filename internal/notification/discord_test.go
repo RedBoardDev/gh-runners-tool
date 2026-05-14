@@ -12,7 +12,7 @@ import (
 )
 
 func TestDiscordProvider_Name(t *testing.T) {
-	d := NewDiscord(DiscordConfig{})
+	d := NewDiscord(&DiscordConfig{})
 	if d.Name() != "discord" {
 		t.Errorf("Name() = %q, want %q", d.Name(), "discord")
 	}
@@ -46,13 +46,13 @@ func TestDiscordProvider_Send(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		d := NewDiscord(DiscordConfig{
+		d := NewDiscord(&DiscordConfig{
 			WebhookURL: srv.URL,
 			Username:   "ghr-test",
 			Mentions:   DiscordMentions{Error: "<@&123>"},
 		})
 
-		err := d.Send(context.Background(), baseEvent)
+		err := d.Send(context.Background(), &baseEvent)
 		if err != nil {
 			t.Fatalf("Send() error = %v", err)
 		}
@@ -92,8 +92,8 @@ func TestDiscordProvider_Send(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		d := NewDiscord(DiscordConfig{WebhookURL: srv.URL})
-		if err := d.Send(context.Background(), baseEvent); err != nil {
+		d := NewDiscord(&DiscordConfig{WebhookURL: srv.URL})
+		if err := d.Send(context.Background(), &baseEvent); err != nil {
 			t.Fatalf("Send() error = %v", err)
 		}
 
@@ -120,7 +120,7 @@ func TestDiscordProvider_Send(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		d := NewDiscord(DiscordConfig{
+		d := NewDiscord(&DiscordConfig{
 			WebhookURL: srv.URL,
 			Mentions:   DiscordMentions{Error: "<@&123>", Critical: "@everyone"},
 		})
@@ -128,7 +128,7 @@ func TestDiscordProvider_Send(t *testing.T) {
 		infoEvent := baseEvent
 		infoEvent.Level = model.LevelInfo
 
-		if err := d.Send(context.Background(), infoEvent); err != nil {
+		if err := d.Send(context.Background(), &infoEvent); err != nil {
 			t.Fatalf("Send() error = %v", err)
 		}
 
@@ -148,7 +148,7 @@ func TestDiscordProvider_Send(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		d := NewDiscord(DiscordConfig{
+		d := NewDiscord(&DiscordConfig{
 			WebhookURL: srv.URL,
 			Mentions:   DiscordMentions{Critical: "@everyone"},
 		})
@@ -156,7 +156,7 @@ func TestDiscordProvider_Send(t *testing.T) {
 		critEvent := baseEvent
 		critEvent.Level = model.LevelCritical
 
-		if err := d.Send(context.Background(), critEvent); err != nil {
+		if err := d.Send(context.Background(), &critEvent); err != nil {
 			t.Fatalf("Send() error = %v", err)
 		}
 
@@ -171,8 +171,8 @@ func TestDiscordProvider_Send(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		d := NewDiscord(DiscordConfig{WebhookURL: srv.URL})
-		err := d.Send(context.Background(), baseEvent)
+		d := NewDiscord(&DiscordConfig{WebhookURL: srv.URL})
+		err := d.Send(context.Background(), &baseEvent)
 		if err == nil {
 			t.Fatal("expected error for 429")
 		}
@@ -184,8 +184,8 @@ func TestDiscordProvider_Send(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		d := NewDiscord(DiscordConfig{WebhookURL: srv.URL})
-		err := d.Send(context.Background(), baseEvent)
+		d := NewDiscord(&DiscordConfig{WebhookURL: srv.URL})
+		err := d.Send(context.Background(), &baseEvent)
 		if err == nil {
 			t.Fatal("expected error for 500")
 		}
@@ -202,7 +202,7 @@ func TestDiscordProvider_Send(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		d := NewDiscord(DiscordConfig{WebhookURL: srv.URL})
+		d := NewDiscord(&DiscordConfig{WebhookURL: srv.URL})
 		evt := model.Event{
 			Type:      "daemon.start",
 			Level:     model.LevelInfo,
@@ -210,7 +210,7 @@ func TestDiscordProvider_Send(t *testing.T) {
 			Timestamp: time.Now(),
 		}
 
-		if err := d.Send(context.Background(), evt); err != nil {
+		if err := d.Send(context.Background(), &evt); err != nil {
 			t.Fatalf("Send() error = %v", err)
 		}
 

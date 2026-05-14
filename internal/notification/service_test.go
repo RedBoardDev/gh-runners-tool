@@ -20,10 +20,10 @@ type fakeProvider struct {
 
 func (f *fakeProvider) Name() string { return f.name }
 
-func (f *fakeProvider) Send(_ context.Context, event model.Event) error {
+func (f *fakeProvider) Send(_ context.Context, event *model.Event) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.events = append(f.events, event)
+	f.events = append(f.events, *event)
 	return f.err
 }
 
@@ -53,7 +53,7 @@ func TestService_Notify(t *testing.T) {
 			slog.Default(),
 		)
 
-		svc.Notify(context.Background(), event)
+		svc.Notify(context.Background(), &event)
 
 		if len(p1.received()) != 1 {
 			t.Errorf("p1 got %d events, want 1", len(p1.received()))
@@ -76,7 +76,7 @@ func TestService_Notify(t *testing.T) {
 			slog.Default(),
 		)
 
-		svc.Notify(context.Background(), event)
+		svc.Notify(context.Background(), &event)
 
 		if len(p1.received()) != 1 {
 			t.Errorf("p1 got %d events, want 1", len(p1.received()))
@@ -95,7 +95,7 @@ func TestService_Notify(t *testing.T) {
 			slog.Default(),
 		)
 
-		svc.Notify(context.Background(), event)
+		svc.Notify(context.Background(), &event)
 
 		if len(p.received()) != 1 {
 			t.Errorf("got %d events, want 1", len(p.received()))
@@ -111,7 +111,7 @@ func TestService_Notify(t *testing.T) {
 			slog.Default(),
 		)
 
-		svc.Notify(context.Background(), event)
+		svc.Notify(context.Background(), &event)
 
 		if len(p.received()) != 1 {
 			t.Errorf("got %d events, want 1", len(p.received()))
@@ -128,7 +128,7 @@ func TestService_Notify(t *testing.T) {
 			slog.Default(),
 		)
 
-		svc.Notify(context.Background(), event)
+		svc.Notify(context.Background(), &event)
 
 		if len(p2.received()) != 1 {
 			t.Errorf("p2 got %d events, want 1", len(p2.received()))
@@ -137,6 +137,6 @@ func TestService_Notify(t *testing.T) {
 
 	t.Run("no providers does not panic", func(t *testing.T) {
 		svc := New(nil, nil, slog.Default())
-		svc.Notify(context.Background(), event)
+		svc.Notify(context.Background(), &event)
 	})
 }

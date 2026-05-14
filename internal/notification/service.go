@@ -9,7 +9,7 @@ import (
 
 type Provider interface {
 	Name() string
-	Send(ctx context.Context, event model.Event) error
+	Send(ctx context.Context, event *model.Event) error
 }
 
 type Service struct {
@@ -37,7 +37,7 @@ func New(providers []Provider, filters map[string]EventFilter, logger *slog.Logg
 	}
 }
 
-func (s *Service) Notify(ctx context.Context, event model.Event) {
+func (s *Service) Notify(ctx context.Context, event *model.Event) {
 	for _, entry := range s.providers {
 		if !entry.filter.Matches(event.Type, string(event.Level)) {
 			continue
