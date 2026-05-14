@@ -1,5 +1,5 @@
 #!/bin/bash
-set -euo pipefail
+set -uo pipefail
 
 LOG_DIR="${GHR_LOG_DIR:-$HOME/.local/share/ghr/logs}"
 STATE_DIR="${GHR_STATE_DIR:-$HOME/.local/state/ghr}"
@@ -158,7 +158,7 @@ fi
 
 section "=== Cleanup State ==="
 
-ORPHAN_PROCS=$(ps aux 2>/dev/null | grep -c "[R]unner.Listener" || echo 0)
+ORPHAN_PROCS=$(ps aux 2>/dev/null | grep "[R]unner.Listener" | wc -l | tr -d ' ')
 if [ "$ORPHAN_PROCS" -eq 0 ]; then pass "No orphan runner processes"
 else fail "$ORPHAN_PROCS orphan processes found"; fi
 
