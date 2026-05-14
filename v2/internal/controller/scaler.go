@@ -7,15 +7,24 @@ import (
 	"sync"
 	"time"
 
+	"io"
+
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/logging"
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/model"
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/runner"
 	"github.com/actions/scaleset"
 )
 
+type runnerStarter interface {
+	Prepare(ctx context.Context, instance model.RunnerInstance, cachedDir string) (string, error)
+	Start(ctx context.Context, instance model.RunnerInstance, workdir string, jitConfig string, logFile io.Writer) (*runner.Process, error)
+	Stop(ctx context.Context, proc *runner.Process) error
+	Cleanup(proc *runner.Process) error
+}
+
 type MacOSScaler struct {
 	client     scaleSetClient
-	process    *runner.ProcessManager
+	process    runnerStarter
 	logMgr     *logging.LogManager
 	notifier   notifier
 	scaleSetID int
@@ -32,7 +41,7 @@ type MacOSScaler struct {
 
 func NewMacOSScaler(
 	client scaleSetClient,
-	process *runner.ProcessManager,
+	process runnerStarter,
 	logMgr *logging.LogManager,
 	notifier notifier,
 	scaleSetID int,
