@@ -1,21 +1,43 @@
-.serena
-*.md
-.DS_Store
-.gocache/
-.env
-.env.*
-config.yaml
-*.log
-*.out
-*.test
-coverage.*
+# Binary
+/ghr
+/ghr.exe
+/v2/ghr
+/v2/ghr.exe
+
+# Build
 bin/
 dist/
-ghr.exe
-**/*.exe
-**/*.dll
-**/*.so
-**/*.dylib
+
+# Go
+*.test
+*.out
+coverage.*
+
+# Environment & secrets
+.env
+.env.*
+credentials.json
+*.pem
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
 .vscode/
 .idea/
-ghr
+*.swp
+*.swo
+*~
+
+# Claude Code
+.claude/settings.local.json
+.serena
+
+# Logs (local dev)
+*.log
+
+# Runner workdirs (local dev)
+runners/
+cache/
+state/
