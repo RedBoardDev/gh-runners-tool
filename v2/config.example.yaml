@@ -1,0 +1,52 @@
+github:
+  url: "https://github.com/my-org"
+  runner_group: "default"
+
+runner:
+  version: "latest"
+  cache_dir: ""
+  workdir_base: ""
+
+groups:
+  - name: "runners"
+    max_runners: 5
+    min_runners: 0
+    labels:
+      - "macos"
+
+health:
+  enabled: true
+  check_interval: "30s"
+  runner_timeout: "2h"
+  idle_timeout: "0"
+  divergence_timeout: "5m"
+  max_consecutive_failures: 5
+  failure_cooldown: "1m"
+  min_disk_space: "1GB"
+
+logging:
+  level: "info"
+  format: "text"
+  dir: ""
+  retention_days: 30
+  runner_output: true
+
+notifications:
+  discord:
+    enabled: false
+    events: []
+    username: "ghr"
+    avatar_url: ""
+    mentions:
+      error: ""
+      critical: ""
+
+monitoring:
+  uptime_kuma:
+    enabled: false
+    degraded_threshold: 0.5
+    report_health_as_ping: true
+
+daemon:
+  state_dir: ""
+  shutdown_timeout: "30s"
