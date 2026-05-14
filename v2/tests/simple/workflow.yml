@@ -1,0 +1,8 @@
+name: ghr simple test
+on: workflow_dispatch
+
+jobs:
+  hello:
+    runs-on: test-simple
+    steps:
+      - run: echo "Hello from ghr!"
