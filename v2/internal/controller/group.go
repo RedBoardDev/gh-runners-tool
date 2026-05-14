@@ -82,7 +82,7 @@ func (c *GroupController) runGroupOnce(
 	defer func() {
 		closeCtx := context.WithoutCancel(ctx)
 		if closeErr := session.Close(closeCtx); closeErr != nil {
-			groupLogger.WarnContext(ctx, "failed to close session",
+			groupLogger.DebugContext(ctx, "session close",
 				"group", group.Name,
 				"error", closeErr,
 			)
