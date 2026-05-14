@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -85,6 +86,21 @@ func (m *ProcessManager) cleanupStaleRunner(ctx context.Context, group, runner s
 		m.logger.WarnContext(ctx, "failed to remove stale workdir", "dir", runnerDir, "error", removeErr)
 	} else {
 		m.logger.InfoContext(ctx, "cleaned up stale runner", "runner", runner, "group", group, "pid", pid)
+	}
+}
+
+func (m *ProcessManager) KillOrphanRunners(ctx context.Context) {
+	out, err := exec.CommandContext(ctx, "pgrep", "-f", m.workdirBase).Output()
+	if err != nil {
+		return
+	}
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		pid, err := strconv.Atoi(strings.TrimSpace(line))
+		if err != nil || pid <= 0 {
+			continue
+		}
+		m.logger.WarnContext(ctx, "killing orphan runner process", "pid", pid)
+		syscall.Kill(pid, syscall.SIGKILL)
 	}
 }
 

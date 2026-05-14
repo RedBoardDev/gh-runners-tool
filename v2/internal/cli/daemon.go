@@ -63,6 +63,7 @@ func buildDaemon(cfg *config.Config, creds *auth.Credentials, githubURL string) 
 	if err := processMgr.CleanupStale(context.Background()); err != nil {
 		logger.Warn("stale runner cleanup failed", "error", err)
 	}
+	processMgr.KillOrphanRunners(context.Background())
 
 	notifSvc := buildNotificationService(cfg, logger)
 	reporters := buildReporters(cfg, logger)
@@ -89,6 +90,7 @@ func buildDaemon(cfg *config.Config, creds *auth.Credentials, githubURL string) 
 		MaxConsecutiveFailures: cfg.Health.MaxConsecutiveFailures,
 		FailureCooldown:        cfg.Health.FailureCooldown.Duration,
 		MinDiskSpace:           minDiskSpace,
+		GroupMinRunners:        buildGroupMinRunners(cfg),
 	}, notifSvc, ctrl, reporters, ctrl, logger)
 
 	apiServer := api.NewServer(cfg.Daemon.StateDir, ctrl, healthMon, logger)
@@ -175,4 +177,12 @@ func writePIDFile(path string) error {
 
 func removePIDFile(path string) {
 	_ = os.Remove(path)
+}
+
+func buildGroupMinRunners(cfg *config.Config) map[string]int {
+	m := make(map[string]int, len(cfg.Groups))
+	for _, g := range cfg.Groups {
+		m[g.Name] = g.MinRunners
+	}
+	return m
 }

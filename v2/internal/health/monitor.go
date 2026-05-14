@@ -35,6 +35,7 @@ type MonitorConfig struct {
 	MaxConsecutiveFailures int
 	FailureCooldown        time.Duration
 	MinDiskSpace           int64
+	GroupMinRunners        map[string]int
 }
 
 type Monitor struct {

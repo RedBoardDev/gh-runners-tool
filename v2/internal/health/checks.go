@@ -24,7 +24,7 @@ func (m *Monitor) runChecks(ctx context.Context) {
 	for group, snaps := range snapshots {
 		m.checkRunnerLiveness(ctx, group, snaps)
 		m.checkRunnerTimeouts(ctx, group, snaps)
-		m.checkIdleTimeouts(group, snaps)
+		m.checkIdleTimeouts(ctx, group, snaps)
 		gs := m.getOrCreateGroup(group)
 		m.checkGroupDivergence(group, len(snaps), gs)
 		m.checkConsecutiveFailures(group, gs)
@@ -113,21 +113,38 @@ func (m *Monitor) checkRunnerTimeouts(ctx context.Context, group string, snapsho
 	}
 }
 
-func (m *Monitor) checkIdleTimeouts(group string, snapshots []model.RunnerSnapshot) {
+func (m *Monitor) checkIdleTimeouts(ctx context.Context, group string, snapshots []model.RunnerSnapshot) {
 	if m.cfg.IdleTimeout <= 0 {
 		return
 	}
 
+	minRunners := 0
+	if m.cfg.GroupMinRunners != nil {
+		minRunners = m.cfg.GroupMinRunners[group]
+	}
+
 	now := time.Now()
+	var timedOut []model.RunnerSnapshot
 	for _, snap := range snapshots {
-		if snap.State != "idle" {
+		if snap.State != "idle" || snap.StartedAt.IsZero() {
 			continue
 		}
-		if snap.StartedAt.IsZero() {
-			continue
+		if now.Sub(snap.StartedAt) > m.cfg.IdleTimeout {
+			timedOut = append(timedOut, snap)
 		}
-		if now.Sub(snap.StartedAt) <= m.cfg.IdleTimeout {
-			continue
+	}
+
+	idleCount := 0
+	for _, snap := range snapshots {
+		if snap.State == "idle" {
+			idleCount++
+		}
+	}
+
+	killable := idleCount - minRunners
+	for _, snap := range timedOut {
+		if killable <= 0 {
+			break
 		}
 		m.issues = append(m.issues, model.HealthIssue{
 			Level:      model.LevelWarning,
@@ -137,6 +154,12 @@ func (m *Monitor) checkIdleTimeouts(group string, snapshots []model.RunnerSnapsh
 			Message:    fmt.Sprintf("runner %s has been idle for %s (timeout: %s)", snap.Name, now.Sub(snap.StartedAt).Round(time.Second), m.cfg.IdleTimeout),
 			DetectedAt: now,
 		})
+		if m.killer != nil {
+			if killErr := m.killer.KillRunner(ctx, group, snap.Name); killErr != nil {
+				m.logger.ErrorContext(ctx, "failed to kill idle runner", "group", group, "runner", snap.Name, "error", killErr)
+			}
+		}
+		killable--
 	}
 }
 

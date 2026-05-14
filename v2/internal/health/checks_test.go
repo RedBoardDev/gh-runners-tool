@@ -96,7 +96,7 @@ func TestCheckIdleTimeouts(t *testing.T) {
 			m.cfg.IdleTimeout = tt.idleTimeout
 			m.issues = m.issues[:0]
 
-			m.checkIdleTimeouts("test-group", tt.snapshots)
+			m.checkIdleTimeouts(context.Background(), "test-group", tt.snapshots)
 
 			if len(m.issues) != tt.wantIssues {
 				t.Errorf("expected %d issues, got %d", tt.wantIssues, len(m.issues))
