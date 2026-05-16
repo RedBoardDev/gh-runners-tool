@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+
+	"github.com/RedBoardDev/gh-runners-tool/v2/internal/logging"
 )
 
 func (m *ProcessManager) CleanupStale(ctx context.Context) error {
@@ -25,7 +27,7 @@ func (m *ProcessManager) CleanupStale(ctx context.Context) error {
 			continue
 		}
 		if err := m.cleanupStaleGroup(ctx, groupEntry.Name()); err != nil {
-			m.logger.WarnContext(ctx, "failed to cleanup stale group", "group", groupEntry.Name(), "error", err)
+			m.logger.WarnContext(ctx, "failed to cleanup stale group", logging.KeyGroup, groupEntry.Name(), logging.KeyError, err)
 		}
 	}
 
@@ -55,33 +57,33 @@ func (m *ProcessManager) cleanupStaleRunner(ctx context.Context, group, runner s
 
 	pidBytes, err := os.ReadFile(pidFile)
 	if err != nil {
-		m.logger.DebugContext(ctx, "no PID file found, removing stale workdir", "dir", runnerDir)
+		m.logger.DebugContext(ctx, "no PID file found, removing stale workdir", logging.KeyDir, runnerDir)
 		m.removeStaleDir(ctx, runnerDir)
 		return
 	}
 
 	pid, err := strconv.Atoi(strings.TrimSpace(string(pidBytes)))
 	if err != nil {
-		m.logger.WarnContext(ctx, "invalid PID file content, removing workdir", "dir", runnerDir, "error", err)
+		m.logger.WarnContext(ctx, "invalid PID file content, removing workdir", logging.KeyDir, runnerDir, logging.KeyError, err)
 		m.removeStaleDir(ctx, runnerDir)
 		return
 	}
 
 	if isProcessAlive(pid) {
-		m.logger.WarnContext(ctx, "killing stale runner process", "pid", pid, "runner", runner, "group", group)
+		m.logger.WarnContext(ctx, "killing stale runner process", logging.KeyPID, pid, logging.KeyRunner, runner, logging.KeyGroup, group)
 		if killErr := syscall.Kill(pid, syscall.SIGKILL); killErr != nil {
-			m.logger.WarnContext(ctx, "failed to kill stale process", "pid", pid, "error", killErr)
+			m.logger.WarnContext(ctx, "failed to kill stale process", logging.KeyPID, pid, logging.KeyError, killErr)
 		}
 	}
 
 	if m.removeStaleDir(ctx, runnerDir) {
-		m.logger.InfoContext(ctx, "cleaned up stale runner", "runner", runner, "group", group, "pid", pid)
+		m.logger.InfoContext(ctx, "cleaned up stale runner", logging.KeyRunner, runner, logging.KeyGroup, group, logging.KeyPID, pid)
 	}
 }
 
 func (m *ProcessManager) removeStaleDir(ctx context.Context, dir string) bool {
 	if err := os.RemoveAll(dir); err != nil {
-		m.logger.WarnContext(ctx, "failed to remove stale workdir", "dir", dir, "error", err)
+		m.logger.WarnContext(ctx, "failed to remove stale workdir", logging.KeyDir, dir, logging.KeyError, err)
 		return false
 	}
 	return true
@@ -98,12 +100,12 @@ func (m *ProcessManager) KillOrphanRunners(ctx context.Context) {
 			continue
 		}
 		if !m.processBelongsToGhr(ctx, pid) {
-			m.logger.DebugContext(ctx, "ignoring pgrep match not owned by ghr", "pid", pid)
+			m.logger.DebugContext(ctx, "ignoring pgrep match not owned by ghr", logging.KeyPID, pid)
 			continue
 		}
-		m.logger.WarnContext(ctx, "killing orphan runner process", "pid", pid)
+		m.logger.WarnContext(ctx, "killing orphan runner process", logging.KeyPID, pid)
 		if killErr := syscall.Kill(pid, syscall.SIGKILL); killErr != nil {
-			m.logger.WarnContext(ctx, "failed to kill orphan runner", "pid", pid, "error", killErr)
+			m.logger.WarnContext(ctx, "failed to kill orphan runner", logging.KeyPID, pid, logging.KeyError, killErr)
 		}
 	}
 }

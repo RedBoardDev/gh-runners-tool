@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 
+	"github.com/RedBoardDev/gh-runners-tool/v2/internal/logging"
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/model"
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/runner"
 )
@@ -45,9 +46,9 @@ func (s *MacOSScaler) startRunner(ctx context.Context) error {
 	s.idle[name] = proc
 
 	s.logger.InfoContext(ctx, "runner provisioned",
-		"runner", name,
-		"group", s.groupName,
-		"pid", proc.PID,
+		logging.KeyRunner, name,
+		logging.KeyGroup, s.groupName,
+		logging.KeyPID, proc.PID,
 	)
 
 	return nil
@@ -70,8 +71,8 @@ func (s *MacOSScaler) killRunner(ctx context.Context, runnerName string) error {
 	stopErr := s.process.Stop(ctx, proc)
 	if stopErr != nil {
 		s.logger.WarnContext(ctx, "failed to stop runner during kill",
-			"runner", runnerName,
-			"error", stopErr,
+			logging.KeyRunner, runnerName,
+			logging.KeyError, stopErr,
 		)
 	}
 
@@ -82,12 +83,12 @@ func (s *MacOSScaler) killRunner(ctx context.Context, runnerName string) error {
 
 	if logsErr := s.logMgr.RemoveRunnerLogs(s.groupName, runnerName); logsErr != nil {
 		s.logger.WarnContext(ctx, "failed to remove runner log dir",
-			"runner", runnerName,
-			"error", logsErr,
+			logging.KeyRunner, runnerName,
+			logging.KeyError, logsErr,
 		)
 	}
 
-	s.logger.InfoContext(ctx, "killed runner", "runner", runnerName, "group", s.groupName)
+	s.logger.InfoContext(ctx, "killed runner", logging.KeyRunner, runnerName, logging.KeyGroup, s.groupName)
 	return nil
 }
 
@@ -108,21 +109,21 @@ func (s *MacOSScaler) Shutdown(ctx context.Context) {
 		stopErr := s.process.Stop(ctx, proc)
 		if stopErr != nil {
 			s.logger.WarnContext(ctx, "failed to stop runner during shutdown",
-				"runner", proc.Name,
-				"error", stopErr,
+				logging.KeyRunner, proc.Name,
+				logging.KeyError, stopErr,
 			)
 		}
 		cleanupErr := s.process.Cleanup(proc)
 		if cleanupErr != nil {
 			s.logger.WarnContext(ctx, "failed to cleanup runner during shutdown",
-				"runner", proc.Name,
-				"error", cleanupErr,
+				logging.KeyRunner, proc.Name,
+				logging.KeyError, cleanupErr,
 			)
 		}
 		if logsErr := s.logMgr.RemoveRunnerLogs(s.groupName, proc.Name); logsErr != nil {
 			s.logger.WarnContext(ctx, "failed to remove runner log dir during shutdown",
-				"runner", proc.Name,
-				"error", logsErr,
+				logging.KeyRunner, proc.Name,
+				logging.KeyError, logsErr,
 			)
 		}
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/RedBoardDev/gh-runners-tool/v2/internal/logging"
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/model"
 )
 
@@ -47,7 +48,7 @@ func (s *Service) Notify(ctx context.Context, event *model.Event) {
 			s.logger.Warn("notification send failed",
 				"provider", entry.provider.Name(),
 				"event", event.Type,
-				"error", err,
+				logging.KeyError, err,
 			)
 		}
 	}
