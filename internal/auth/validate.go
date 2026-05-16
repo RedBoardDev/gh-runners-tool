@@ -29,7 +29,7 @@ func validatePAT(ctx context.Context, pat string) (*ValidationResult, error) {
 	req.Header.Set("Authorization", "Bearer "+pat)
 	req.Header.Set("Accept", "application/vnd.github+json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("validate PAT: request failed: %w", err)
 	}

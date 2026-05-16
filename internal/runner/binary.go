@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 )
 
 type BinaryManager struct {
@@ -20,9 +21,11 @@ type BinaryManager struct {
 
 func NewBinaryManager(cacheDir string, logger *slog.Logger) *BinaryManager {
 	return &BinaryManager{
-		cacheDir:   cacheDir,
-		logger:     logger,
-		httpClient: &http.Client{},
+		cacheDir: cacheDir,
+		logger:   logger,
+		httpClient: &http.Client{
+			Timeout: 10 * time.Minute,
+		},
 	}
 }
 

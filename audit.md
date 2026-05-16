@@ -128,20 +128,6 @@ if err := os.Chmod(s.socketPath, 0o600); err != nil {
 
 Ou mieux : créer le socket dans un dossier déjà `0o700` (`stateDir`) et permettre `0o660` pour permettre une intégration multi-utilisateur volontaire.
 
-### I.5 🔴 HAUTE — Pas de TLS/connection timeout sur les clients HTTP de `auth/`
-
-**Fichier** : `internal/auth/installations.go:41,93`, `internal/auth/validate.go:32`.
-
-`http.DefaultClient.Do(req)` n'a **pas de timeout** par défaut. Un GitHub lent (ou un attaquant lent-loris contrôlant la résolution DNS) bloquera indéfiniment l'opération `login` ou `auth status`.
-
-**Recommandation** : créer un client local avec `Timeout: 30 * time.Second` (ou par requête via `context.WithTimeout`) et le partager entre les fonctions du package.
-
-```go
-var httpClient = &http.Client{Timeout: 30 * time.Second}
-```
-
-Pareil pour `internal/runner/binary.go:25` (`httpClient: &http.Client{}`) — le DL d'un tarball de 100 Mo doit avoir un timeout généreux mais borné.
-
 ### I.6 🔴 HAUTE — Stockage des credentials en clair
 
 **Fichier** : `internal/auth/store.go:Save` écrit `~/.config/ghr/credentials.json` avec `0o600`, mais en clair.
