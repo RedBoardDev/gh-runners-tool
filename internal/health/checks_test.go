@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -12,11 +13,36 @@ import (
 )
 
 type noopNotifier struct {
+	mu     sync.Mutex
 	events []model.Event
 }
 
 func (n *noopNotifier) Notify(_ context.Context, event *model.Event) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
 	n.events = append(n.events, *event)
+}
+
+func (n *noopNotifier) snapshot() []model.Event {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	out := make([]model.Event, len(n.events))
+	copy(out, n.events)
+	return out
+}
+
+func (n *noopNotifier) waitFor(t *testing.T, eventType string, timeout time.Duration) bool {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		for _, e := range n.snapshot() {
+			if e.Type == eventType {
+				return true
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	return false
 }
 
 type fakeRunnerState struct {
@@ -301,13 +327,7 @@ func TestRunChecks_IntegrationWithNotifier(t *testing.T) {
 
 	m.runChecks(context.Background())
 
-	foundIdle := false
-	for _, e := range notif.events {
-		if e.Type == model.EventHealthIdleTimeout {
-			foundIdle = true
-		}
-	}
-	if !foundIdle {
+	if !notif.waitFor(t, model.EventHealthIdleTimeout, 2*time.Second) {
 		t.Error("expected idle timeout event to be notified")
 	}
 }

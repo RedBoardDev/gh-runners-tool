@@ -171,29 +171,6 @@ type groupStatsReporter interface {
 
 Sans ce câblage, deux features documentées du produit (divergence detection et consecutive-failure alert) sont du **vaporware**.
 
-### II.6 🔴 HAUTE — Notifications & reporting synchrones sous lock
-
-**Fichier** : `internal/health/checks.go:runChecks:11-58`.
-
-```go
-func (m *Monitor) runChecks(ctx context.Context) {
-    m.mu.Lock()
-    defer m.mu.Unlock()
-    // ... checks ...
-    for _, r := range m.reporters {
-        r.ReportDaemonHealth(ctx, ...)    // ⚠️ HTTP under mutex
-    }
-    for group, snaps := range snapshots {
-        for _, r := range m.reporters {
-            r.ReportGroupHealth(ctx, ...) // ⚠️ HTTP under mutex
-        }
-    }
-    for _, issue := range m.issues {
-        m.notifier.Notify(ctx, &model.Event{...})  // ⚠️ HTTP+throttle under mutex
-    }
-}
-```
-
 `Discord.throttle()` sleep jusqu'à 2 s. `UptimeKuma.push` peut prendre 30 s en cas de timeout réseau. Pendant ce temps :
 - `Monitor.Status()` (called by `/status` HTTP) est bloqué (RLock attendu).
 - Le prochain tick `runChecks` accumule.
