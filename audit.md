@@ -542,12 +542,6 @@ L'opérateur peut changer `labels:` dans la config, faire `ghr restart`, et croi
 
 `Name = groupName-id`. Le `ID` seul n'est jamais utilisé en aval. Soit on l'enlève, soit on le surface dans le snapshot et l'API `/status`.
 
-### II.16 🟠 MOYENNE — `cleanupStaleRunner` 3 fois la même branche d'erreur
-
-**Fichier** : `internal/runner/cleanup.go:51-89`.
-
-`os.RemoveAll(runnerDir)` + `if removeErr != nil { logger.WarnContext(...) }` apparaît 3 fois. Extraire dans une helper.
-
 ### II.18 🟡 BASSE — `interactiveApp` accepte URL host vide
 
 **Fichier** : `internal/cli/login_wizard.go:69-72`.
