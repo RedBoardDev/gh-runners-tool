@@ -45,21 +45,6 @@
 
 ## I. Sécurité
 
-### I.2 ⛔ CRITIQUE — Pas de vérification d'intégrité du binaire runner
-
-**Fichier** : `internal/runner/download.go:17-36` (`downloadAndExtract`).
-
-Le code télécharge `https://github.com/actions/runner/releases/download/v.../actions-runner-osx-...-VERSION.tar.gz` et l'extrait, sans vérifier ni le checksum SHA-256 publié dans la release GitHub, ni la signature détachée. Un MITM (DNS empoisonné, proxy d'entreprise modifié, mirror compromis, etc.) peut substituer un binaire malicieux qui sera ensuite **exécuté avec les permissions du daemon** (`run.sh` lancé via `exec.CommandContext`).
-
-**Recommandation** : pour chaque version résolue, télécharger d'abord `https://github.com/actions/runner/releases/download/v{version}/actions-runner-osx-{arch}-{version}.tar.gz.sha256` (publié par GitHub), comparer au hash calculé en streaming. Idéalement, valider aussi la signature Sigstore (cosign) si disponible.
-
-```go
-hasher := sha256.New()
-tee := io.TeeReader(resp.Body, hasher)
-// extract from tee...
-if !bytes.Equal(hasher.Sum(nil), expected) { return ErrChecksumMismatch }
-```
-
 ### I.3 ⛔ CRITIQUE — `pgrep -f workdirBase` peut tuer des processus arbitraires
 
 **Fichier** : `internal/runner/cleanup.go:91-104` (`KillOrphanRunners`).

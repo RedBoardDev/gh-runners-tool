@@ -4,6 +4,9 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -97,6 +100,73 @@ func TestExtractTarGz_BlocksPathTraversal(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "escapes destination") {
 		t.Errorf("error = %v, want substring 'escapes destination'", err)
+	}
+}
+
+func TestFetchExpectedSHA256(t *testing.T) {
+	const valid = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
+	cases := []struct {
+		name       string
+		statusCode int
+		body       string
+		wantHash   string
+		wantErr    string
+	}{
+		{
+			name:       "hash with filename",
+			statusCode: http.StatusOK,
+			body:       valid + "  actions-runner-osx-arm64-2.331.0.tar.gz\n",
+			wantHash:   valid,
+		},
+		{
+			name:       "hash only",
+			statusCode: http.StatusOK,
+			body:       valid + "\n",
+			wantHash:   valid,
+		},
+		{
+			name:       "empty body",
+			statusCode: http.StatusOK,
+			body:       "",
+			wantErr:    "empty",
+		},
+		{
+			name:       "non-sha digest",
+			statusCode: http.StatusOK,
+			body:       "shortdigest\n",
+			wantErr:    "not a sha-256",
+		},
+		{
+			name:       "404",
+			statusCode: http.StatusNotFound,
+			body:       "",
+			wantErr:    "HTTP 404",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(tc.statusCode)
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			defer srv.Close()
+
+			got, err := fetchExpectedSHA256(context.Background(), srv.Client(), srv.URL)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("err = %v, want substring %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tc.wantHash {
+				t.Errorf("hash = %q, want %q", got, tc.wantHash)
+			}
+		})
 	}
 }
 

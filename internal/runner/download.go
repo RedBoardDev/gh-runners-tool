@@ -4,6 +4,8 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -17,6 +19,11 @@ const downloadURLTemplate = "https://github.com/actions/runner/releases/download
 
 func downloadAndExtract(ctx context.Context, client *http.Client, version, destDir string) error {
 	url := fmt.Sprintf(downloadURLTemplate, version, runnerArch(), version)
+
+	expected, err := fetchExpectedSHA256(ctx, client, url+".sha256")
+	if err != nil {
+		return fmt.Errorf("fetch checksum for %s: %w", url, err)
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
@@ -33,7 +40,53 @@ func downloadAndExtract(ctx context.Context, client *http.Client, version, destD
 		return fmt.Errorf("download returned HTTP %d for %s", resp.StatusCode, url)
 	}
 
-	return extractTarGz(resp.Body, destDir)
+	hasher := sha256.New()
+	tee := io.TeeReader(resp.Body, hasher)
+
+	if err := extractTarGz(tee, destDir); err != nil {
+		return err
+	}
+	if _, err := io.Copy(io.Discard, tee); err != nil {
+		return fmt.Errorf("drain tarball: %w", err)
+	}
+
+	got := hex.EncodeToString(hasher.Sum(nil))
+	if !strings.EqualFold(got, expected) {
+		return fmt.Errorf("checksum mismatch for %s: got %s, want %s", url, got, expected)
+	}
+	return nil
+}
+
+func fetchExpectedSHA256(ctx context.Context, client *http.Client, url string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
+	if err != nil {
+		return "", fmt.Errorf("create checksum request: %w", err)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("fetch checksum: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("checksum URL returned HTTP %d for %s", resp.StatusCode, url)
+	}
+
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, 1024))
+	if err != nil {
+		return "", fmt.Errorf("read checksum response: %w", err)
+	}
+
+	fields := strings.Fields(string(raw))
+	if len(fields) == 0 {
+		return "", fmt.Errorf("checksum file %s is empty", url)
+	}
+	hash := strings.ToLower(fields[0])
+	if len(hash) != 64 {
+		return "", fmt.Errorf("checksum %q from %s is not a sha-256 digest", hash, url)
+	}
+	return hash, nil
 }
 
 func extractTarGz(r io.Reader, destDir string) error {
