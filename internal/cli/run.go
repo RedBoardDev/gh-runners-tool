@@ -110,6 +110,14 @@ func runDaemonGroup(d *daemon) error {
 	}
 
 	{
+		ctx, cancel := context.WithCancel(context.Background())
+		g.Add(
+			safeActor(d.logger, "watchdog", func() error { return runWatchdog(ctx, d.cfg.Daemon.StateDir, d.logger) }),
+			func(error) { cancel() },
+		)
+	}
+
+	{
 		ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 		g.Add(
 			func() error {
