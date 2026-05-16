@@ -38,7 +38,7 @@ func ListAppInstallations(ctx context.Context, apiBaseURL, appJWT string) ([]Ins
 	req.Header.Set("Authorization", "Bearer "+appJWT)
 	req.Header.Set("Accept", "application/vnd.github+json")
 
-	resp, err := httpClient.Do(req)
+	resp, err := doGuarded(req)
 	if err != nil {
 		return nil, fmt.Errorf("list installations: %w", err)
 	}
@@ -90,7 +90,7 @@ func IssueInstallationToken(ctx context.Context, apiBaseURL, appJWT string, inst
 	req.Header.Set("Authorization", "Bearer "+appJWT)
 	req.Header.Set("Accept", "application/vnd.github+json")
 
-	resp, err := httpClient.Do(req)
+	resp, err := doGuarded(req)
 	if err != nil {
 		return nil, fmt.Errorf("issue installation token: %w", err)
 	}
