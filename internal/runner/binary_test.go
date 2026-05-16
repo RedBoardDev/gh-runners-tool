@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 )
 
 func silentLogger() *slog.Logger {
@@ -79,6 +80,9 @@ func TestEnsureBits_Cached(t *testing.T) {
 	if err := os.WriteFile(runSh, []byte("#!/bin/bash\n"), 0o755); err != nil {
 		t.Fatalf("write run.sh: %v", err)
 	}
+	if err := os.WriteFile(filepath.Join(versionDir, ".complete"), nil, 0o644); err != nil {
+		t.Fatalf("write completion marker: %v", err)
+	}
 
 	bm := NewBinaryManager(cacheDir, silentLogger())
 
@@ -89,6 +93,31 @@ func TestEnsureBits_Cached(t *testing.T) {
 
 	if got != versionDir {
 		t.Fatalf("expected path %q, got %q", versionDir, got)
+	}
+}
+
+func TestEnsureBits_IncompleteCacheIsCleaned(t *testing.T) {
+	cacheDir := t.TempDir()
+	version := "2.320.0"
+
+	versionDir := filepath.Join(cacheDir, version)
+	if err := os.MkdirAll(versionDir, 0o755); err != nil {
+		t.Fatalf("create version dir: %v", err)
+	}
+	// run.sh exists but no .complete marker → previous download was interrupted.
+	if err := os.WriteFile(filepath.Join(versionDir, "run.sh"), []byte("#!/bin/bash\n"), 0o755); err != nil {
+		t.Fatalf("write run.sh: %v", err)
+	}
+
+	bm := NewBinaryManager(cacheDir, silentLogger())
+	// Point at an unreachable host so the redownload fails after the stale dir is removed.
+	bm.httpClient = &http.Client{Timeout: 100 * time.Millisecond}
+	_, err := bm.EnsureBits(context.Background(), version)
+	if err == nil {
+		t.Fatal("expected EnsureBits to attempt re-download, got nil error")
+	}
+	if _, statErr := os.Stat(versionDir); !os.IsNotExist(statErr) {
+		t.Errorf("incomplete cache dir should have been removed, stat err = %v", statErr)
 	}
 }
 
@@ -127,6 +156,9 @@ func TestEnsureBits_Download(t *testing.T) {
 
 	if err := extractTarGz(resp.Body, versionDir); err != nil {
 		t.Fatalf("extract tar.gz: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(versionDir, ".complete"), nil, 0o644); err != nil {
+		t.Fatalf("write completion marker: %v", err)
 	}
 
 	runSh := filepath.Join(versionDir, "run.sh")

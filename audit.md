@@ -211,40 +211,6 @@ type groupStatsReporter interface {
 
 Sans ce câblage, deux features documentées du produit (divergence detection et consecutive-failure alert) sont du **vaporware**.
 
-### II.2 ⛔ CRITIQUE — Race condition sur le cache de runner
-
-**Fichier** : `internal/runner/binary.go:EnsureBits:28-63`.
-
-```go
-runShPath := filepath.Join(destDir, "run.sh")
-if _, err := os.Stat(runShPath); err == nil {
-    return destDir, nil   // cached
-}
-```
-
-Deux groupes utilisant la même version appellent `EnsureBits` en parallèle au démarrage. Scénario :
-
-1. Goroutine A : `os.Stat(runShPath)` → NotExist, lance le DL.
-2. A extrait `bin/run.sh` (le 1er fichier du tar).
-3. Goroutine B : `os.Stat(runShPath)` → existe, retourne immédiatement.
-4. B copie le workdir et démarre `run.sh` qui pointe vers un dossier incomplet → erreurs incompréhensibles au runtime.
-
-Pareil si le daemon redémarre pendant un DL : `run.sh` existe mais le reste manque.
-
-**Recommandation** : utiliser un marker `.complete` créé après extraction réussie, et une `sync.Map[version]*sync.Mutex` pour sérialiser les DL.
-
-```go
-m.locks.LoadOrStore(version, &sync.Mutex{})
-mu := m.locks[version].(*sync.Mutex)
-mu.Lock(); defer mu.Unlock()
-
-if _, err := os.Stat(filepath.Join(destDir, ".complete")); err == nil {
-    return destDir, nil
-}
-// ... after extract:
-os.WriteFile(filepath.Join(destDir, ".complete"), nil, 0o644)
-```
-
 ### II.5 🔴 HAUTE — `RunnerGroupID: 1` hardcoded
 
 **Fichier** : `internal/cli/daemon.go:73`.
