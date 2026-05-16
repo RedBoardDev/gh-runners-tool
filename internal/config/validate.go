@@ -3,8 +3,11 @@ package config
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"time"
 )
+
+var labelPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 
 func validate(cfg *Config) error {
 	var errs []error
@@ -40,8 +43,11 @@ func validate(cfg *Config) error {
 		}
 
 		for j, label := range g.Labels {
-			if label == "" {
+			switch {
+			case label == "":
 				errs = append(errs, fmt.Errorf("%s (%s): labels[%d] must not be empty", prefix, g.Name, j))
+			case !labelPattern.MatchString(label):
+				errs = append(errs, fmt.Errorf("%s (%s): labels[%d] %q must match %s", prefix, g.Name, j, label, labelPattern.String()))
 			}
 		}
 	}

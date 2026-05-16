@@ -628,26 +628,6 @@ Manquent : `controller/`, `health/`, `notification/`, `monitoring/`, `api/`, `la
 
 L'exception est intentionnelle (status command preserves exit 0 on validation errors pour scripting). À minima documenter la raison dans un commentaire au-dessus de la fonction (`auth.go:newAuthStatusCmd`).
 
-### III.6 🟠 MOYENNE — Configuration : pas de validation des labels
-
-**Fichier** : `internal/config/validate.go:38-42`.
-
-```go
-for j, label := range g.Labels {
-    if label == "" {
-        errs = append(errs, ...)
-    }
-}
-```
-
-GitHub impose des règles sur les labels : 64 chars max, alphanumérique + `-_`. Pas validé.
-
-**Recommandation** :
-```go
-labelPattern := regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`)
-if !labelPattern.MatchString(label) { ... }
-```
-
 ### III.7 🟠 MOYENNE — `Duration.MarshalYAML` non implémenté
 
 **Fichier** : `internal/config/types.go:96-98`.

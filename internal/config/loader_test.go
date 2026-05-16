@@ -369,6 +369,36 @@ groups:
 			wantInErr: "labels[0] must not be empty",
 		},
 		{
+			name: "label with invalid character",
+			yaml: `
+groups:
+  - name: grp
+    max_runners: 1
+    labels:
+      - "bad label!"`,
+			wantInErr: "labels[0] \"bad label!\" must match",
+		},
+		{
+			name: "label too long",
+			yaml: `
+groups:
+  - name: grp
+    max_runners: 1
+    labels:
+      - "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"`,
+			wantInErr: "must match",
+		},
+		{
+			name: "label starting with hyphen",
+			yaml: `
+groups:
+  - name: grp
+    max_runners: 1
+    labels:
+      - "-leading"`,
+			wantInErr: "must match",
+		},
+		{
 			name: "invalid logging level",
 			yaml: `
 logging:
