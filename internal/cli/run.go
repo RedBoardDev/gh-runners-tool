@@ -3,7 +3,9 @@ package cli
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os/signal"
+	"runtime/debug"
 	"syscall"
 
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/auth"
@@ -78,7 +80,7 @@ func runDaemonGroup(d *daemon) error {
 	{
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(
-			func() error { return d.ctrl.Run(ctx) },
+			safeActor(d.logger, "controller", func() error { return d.ctrl.Run(ctx) }),
 			func(error) { cancel() },
 		)
 	}
@@ -86,7 +88,7 @@ func runDaemonGroup(d *daemon) error {
 	{
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(
-			func() error { return d.health.Run(ctx) },
+			safeActor(d.logger, "health", func() error { return d.health.Run(ctx) }),
 			func(error) { cancel() },
 		)
 	}
@@ -94,7 +96,7 @@ func runDaemonGroup(d *daemon) error {
 	{
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(
-			func() error { return d.api.Run(ctx) },
+			safeActor(d.logger, "api", func() error { return d.api.Run(ctx) }),
 			func(error) { cancel() },
 		)
 	}
@@ -102,7 +104,7 @@ func runDaemonGroup(d *daemon) error {
 	{
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(
-			func() error { return d.logMgr.StartCleanupScheduler(ctx) },
+			safeActor(d.logger, "log-cleanup", func() error { return d.logMgr.StartCleanupScheduler(ctx) }),
 			func(error) { cancel() },
 		)
 	}
@@ -126,4 +128,17 @@ func runDaemonGroup(d *daemon) error {
 
 	d.logger.Info("ghr stopped")
 	return groupErr
+}
+
+func safeActor(logger *slog.Logger, name string, fn func() error) func() error {
+	return func() (err error) {
+		defer func() {
+			if r := recover(); r != nil {
+				stack := debug.Stack()
+				logger.Error("actor panicked", "actor", name, "panic", fmt.Sprintf("%v", r), "stack", string(stack))
+				err = fmt.Errorf("actor %s panicked: %v", name, r)
+			}
+		}()
+		return fn()
+	}
 }
