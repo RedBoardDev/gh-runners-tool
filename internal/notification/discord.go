@@ -16,6 +16,10 @@ import (
 
 const discordMinInterval = 400 * time.Millisecond
 
+// discordServerErrorBackoff is the wait between a 5xx response and the retry.
+// Overridable from tests via the test-only helper in discord_test_helper.go.
+var discordServerErrorBackoff = 2 * time.Second
+
 type DiscordConfig struct {
 	WebhookURL string
 	Username   string
@@ -72,21 +76,33 @@ func (d *DiscordProvider) postWithRateLimitRetry(ctx context.Context, body []byt
 	if err != nil {
 		return nil, err
 	}
-	if resp.StatusCode != http.StatusTooManyRequests {
-		return resp, nil
+
+	switch {
+	case resp.StatusCode == http.StatusTooManyRequests:
+		retryAfter := parseRetryAfter(resp.Header.Get("Retry-After"))
+		_, _ = io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("discord rate limited, context canceled: %w", ctx.Err())
+		case <-time.After(retryAfter):
+		}
+		return d.doPost(ctx, body)
+
+	case resp.StatusCode >= 500:
+		_, _ = io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("discord 5xx, context canceled: %w", ctx.Err())
+		case <-time.After(discordServerErrorBackoff):
+		}
+		return d.doPost(ctx, body)
 	}
 
-	retryAfter := parseRetryAfter(resp.Header.Get("Retry-After"))
-	_, _ = io.Copy(io.Discard, resp.Body)
-	resp.Body.Close()
-
-	select {
-	case <-ctx.Done():
-		return nil, fmt.Errorf("discord rate limited, context canceled: %w", ctx.Err())
-	case <-time.After(retryAfter):
-	}
-
-	return d.doPost(ctx, body)
+	return resp, nil
 }
 
 func (d *DiscordProvider) throttle() {

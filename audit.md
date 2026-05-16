@@ -368,10 +368,6 @@ Doubling sans jitter → thundering herd si N groupes se cassent en même temps 
 
 **Recommandation** : ajouter ±20 % de jitter (`rand.Float64()`).
 
-### IV.10 🟠 MOYENNE — `Discord` rate-limit retry sans backoff sur 5xx
-
-Le code distingue 429 (avec retry) du reste (échec). Mais un 503 transitoire = échec immédiat.
-
 ### IV.11 🟡 BASSE — Pas de `--max-age` sur le cache
 
 Cf. IV.5.
