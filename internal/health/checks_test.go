@@ -332,6 +332,50 @@ func TestRunChecks_IntegrationWithNotifier(t *testing.T) {
 	}
 }
 
+func TestRunChecks_StatusObservesCoherentSnapshots(t *testing.T) {
+	notif := &noopNotifier{}
+	state := &fakeRunnerState{
+		snapshots: map[string][]model.RunnerSnapshot{
+			"group-a": {
+				{Name: "r1", State: "idle", PID: 99999999, StartedAt: time.Now().Add(-2 * time.Hour)},
+			},
+		},
+	}
+
+	m := NewMonitor(
+		MonitorConfig{
+			Enabled:       true,
+			CheckInterval: time.Second,
+			IdleTimeout:   30 * time.Minute,
+		},
+		notif,
+		state,
+		nil,
+		nil,
+		noopLogger(),
+	)
+
+	// runChecks and Status() are expected to be safe to call concurrently:
+	// Status() may observe either the previous or the freshly computed issue
+	// list, but never a torn one.
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < 50; i++ {
+			m.runChecks(context.Background())
+		}
+	}()
+	for i := 0; i < 50; i++ {
+		hs := m.Status()
+		for _, issue := range hs.Issues {
+			if issue.Type == "" {
+				t.Fatalf("torn issue read: %+v", issue)
+			}
+		}
+	}
+	<-done
+}
+
 func timePtr(t time.Time) *time.Time {
 	return &t
 }

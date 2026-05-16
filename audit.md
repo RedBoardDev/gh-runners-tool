@@ -189,18 +189,6 @@ func (m *Monitor) runChecks(ctx context.Context) {
 }
 ```
 
-### II.8 🟠 MOYENNE — `runChecks` reset les issues avant d'ajouter, mais sans atomicité externe
-
-**Fichier** : `internal/health/checks.go:17`.
-
-```go
-m.issues = m.issues[:0]
-```
-
-`Status()` lit `m.issues` avec RLock — OK car runChecks tient le Lock pendant tout le run. Donc thread-safe. Note : un Reader qui obtient RLock juste avant que runChecks demande Lock peut voir la *liste précédente*, ce qui est cohérent.
-
-**Recommandation** : OK, aucune action.
-
 ### II.9 🟠 MOYENNE — Double check de `GITHUB_TOKEN` dans `auth.Load`
 
 **Fichier** : `internal/auth/load.go:31-36`.
