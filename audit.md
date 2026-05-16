@@ -100,14 +100,6 @@ Les sous-commandes `load`/`unload`/`start`/`stop` sont remplacées par `bootstra
 
 Ajouter un fallback pour macOS < 11 si on veut rester compatible.
 
-### I.9 🔴 HAUTE — `copyDir` réplique les symlinks tels quels
-
-**Fichier** : `internal/runner/copy.go:26-32`.
-
-Si l'extraction tar laisse un symlink absolu (cas non-couvert par I.1 si la victime upgrade), `copyDir` copie le lien vers le workdir. Le runner s'exécute alors avec ce lien et écrira potentiellement *à travers* le lien si une étape (action GitHub) fait un `>` sur le path.
-
-**Recommandation** : refuser les symlinks absolus dans copyDir, ou les transformer en hardlinks pour les fichiers, ou faire un copy.Body au lieu d'un Symlink. Idéalement : exposer un mode `--strict` qui empêche les symlinks dans le cache (la plupart des runners GitHub n'en ont pas).
-
 ### I.11 🟠 MOYENNE — `http.Server` sans Read/Write/Idle timeouts
 
 **Fichier** : `internal/api/server.go:53-55`.

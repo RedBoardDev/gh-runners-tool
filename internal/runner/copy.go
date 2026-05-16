@@ -29,6 +29,9 @@ func copyDir(src, dst string) error {
 			if err != nil {
 				return fmt.Errorf("read symlink %s: %w", path, err)
 			}
+			if filepath.IsAbs(link) || !filepath.IsLocal(link) {
+				return fmt.Errorf("refusing to copy symlink %s -> %q (non-local target)", path, link)
+			}
 			return os.Symlink(link, targetPath)
 		}
 
