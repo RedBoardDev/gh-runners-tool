@@ -11,10 +11,9 @@ import (
 const stateFileName = "daemon.state.json"
 
 type daemonState struct {
-	ConfigPath string         `json:"config_path"`
-	StartedAt  time.Time      `json:"started_at"`
-	PID        int            `json:"pid"`
-	Groups     map[string]int `json:"groups"`
+	ConfigPath string    `json:"config_path"`
+	StartedAt  time.Time `json:"started_at"`
+	PID        int       `json:"pid"`
 }
 
 func writeDaemonState(stateDir, configPath string) error {
@@ -22,7 +21,6 @@ func writeDaemonState(stateDir, configPath string) error {
 		ConfigPath: configPath,
 		StartedAt:  time.Now(),
 		PID:        os.Getpid(),
-		Groups:     make(map[string]int),
 	}
 
 	data, err := json.MarshalIndent(state, "", "  ")

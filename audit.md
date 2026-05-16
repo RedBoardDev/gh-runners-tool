@@ -542,19 +542,6 @@ L'opérateur peut changer `labels:` dans la config, faire `ghr restart`, et croi
 
 `Name = groupName-id`. Le `ID` seul n'est jamais utilisé en aval. Soit on l'enlève, soit on le surface dans le snapshot et l'API `/status`.
 
-### II.14 🟠 MOYENNE — `daemonState.Groups` jamais peuplé
-
-**Fichier** : `internal/cli/state.go:writeDaemonState:21-25`.
-
-```go
-state := daemonState{
-    ...
-    Groups: make(map[string]int),  // toujours vide
-}
-```
-
-Soit on supprime le champ, soit on le met à jour via une routine (groupe → count actuel). En l'état, c'est du noise sur disque.
-
 ### II.15 🟠 MOYENNE — `KillOrphanRunners` perd ses erreurs
 
 **Fichier** : `internal/runner/cleanup.go:91-104`.
