@@ -46,12 +46,12 @@ func Install(cfg *ServiceConfig) error {
 		return fmt.Errorf("write plist %s: %w", plistPath, err)
 	}
 
-	if err := launchctlLoad(plistPath); err != nil {
-		return fmt.Errorf("launchctl load: %w", err)
+	if err := launchctlBootstrap(plistPath); err != nil {
+		return fmt.Errorf("launchctl bootstrap: %w", err)
 	}
 
-	if err := launchctlStart(cfg.Label); err != nil {
-		return fmt.Errorf("launchctl start: %w", err)
+	if err := launchctlKickstart(cfg.Label); err != nil {
+		return fmt.Errorf("launchctl kickstart: %w", err)
 	}
 
 	return nil
@@ -60,8 +60,7 @@ func Install(cfg *ServiceConfig) error {
 func Uninstall(label string) error {
 	plistPath := PlistPath(label)
 
-	_ = launchctlStop(label)
-	_ = launchctlUnload(plistPath)
+	_ = launchctlBootout(label)
 
 	if err := os.Remove(plistPath); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("remove plist %s: %w", plistPath, err)

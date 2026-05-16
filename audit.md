@@ -45,19 +45,6 @@
 
 ## I. Sécurité
 
-### I.8 🔴 HAUTE — `launchctl load/unload` est déprécié depuis macOS 10.10
-
-**Fichier** : `internal/launchd/launchctl.go:7-38`.
-
-Les sous-commandes `load`/`unload`/`start`/`stop` sont remplacées par `bootstrap gui/<uid>`, `bootout`, `kickstart`. Sur macOS 15+ certaines commandes peuvent émettre des warnings ou changer de comportement.
-
-**Recommandation** :
-- `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/<label>.plist`
-- `launchctl bootout gui/$(id -u)/<label>`
-- `launchctl kickstart -k gui/$(id -u)/<label>`
-
-Ajouter un fallback pour macOS < 11 si on veut rester compatible.
-
 ### I.11 🟠 MOYENNE — `http.Server` sans Read/Write/Idle timeouts
 
 **Fichier** : `internal/api/server.go:53-55`.
