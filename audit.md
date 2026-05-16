@@ -45,35 +45,6 @@
 
 ## I. Sécurité
 
-### I.1 ⛔ CRITIQUE — Path traversal via symlinks dans l'extraction tar
-
-**Fichier** : `internal/runner/download.go:68-75`
-
-```go
-case tar.TypeSymlink:
-    linkTarget, linkErr := sanitizeTarPath(destDir, header.Linkname)
-    if linkErr != nil {
-        linkTarget = header.Linkname   // ⚠️ on ignore la violation et on utilise tel quel
-    }
-    if err := os.Symlink(linkTarget, target); err != nil {
-        return fmt.Errorf("create symlink %s: %w", target, err)
-    }
-```
-
-Quand `sanitizeTarPath` détecte que `Linkname` sort de `destDir`, le code retombe silencieusement sur le chemin original — exactement le payload de l'attaque. Un tarball forgé peut planter un symlink `runner → /etc/shadow` dans le cache, qui sera ensuite copié par `copyDir` (`internal/runner/copy.go:23-26`) et l'écriture éventuelle dessus suivra le lien.
-
-**Recommandation** : faire `return linkErr` quand la cible n'est pas dans `destDir`. Idem côté `extractFile` : utiliser `os.OpenFile(path, O_CREATE|O_WRONLY|O_TRUNC|O_NOFOLLOW, mode)` pour refuser tout descripteur si la cible est un symlink déjà créé par une entrée précédente.
-
-```go
-case tar.TypeSymlink:
-    if !filepath.IsLocal(header.Linkname) {
-        return fmt.Errorf("tar entry %q symlink %q is not local", header.Name, header.Linkname)
-    }
-    if err := os.Symlink(header.Linkname, target); err != nil { ... }
-```
-
-`filepath.IsLocal` (Go 1.20+) fait exactement le job demandé et rejette `..`, les chemins absolus et les noms réservés Windows.
-
 ### I.2 ⛔ CRITIQUE — Pas de vérification d'intégrité du binaire runner
 
 **Fichier** : `internal/runner/download.go:17-36` (`downloadAndExtract`).
