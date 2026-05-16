@@ -181,6 +181,76 @@ func TestEnsureBits_Download(t *testing.T) {
 	}
 }
 
+func TestGCOldVersions_KeepsRecent(t *testing.T) {
+	cacheDir := t.TempDir()
+	bm := NewBinaryManager(cacheDir, silentLogger())
+
+	versions := []string{"2.310.0", "2.311.0", "2.312.0", "2.313.0", "2.314.0"}
+	for i, v := range versions {
+		dir := filepath.Join(cacheDir, v)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", dir, err)
+		}
+		marker := filepath.Join(dir, ".complete")
+		if err := os.WriteFile(marker, nil, 0o644); err != nil {
+			t.Fatalf("write marker: %v", err)
+		}
+		// Stagger mtimes so the sort by modTime is deterministic.
+		mtime := time.Now().Add(time.Duration(i) * time.Minute)
+		if err := os.Chtimes(marker, mtime, mtime); err != nil {
+			t.Fatalf("chtimes: %v", err)
+		}
+	}
+
+	if err := bm.gcOldVersions(context.Background(), "2.314.0"); err != nil {
+		t.Fatalf("gcOldVersions: %v", err)
+	}
+
+	// 2.314.0 is the active version (excluded from GC); the GC keeps the 2
+	// most recent of the remaining versions (cacheKeepVersions-1).
+	kept := map[string]bool{}
+	entries, _ := os.ReadDir(cacheDir)
+	for _, e := range entries {
+		kept[e.Name()] = true
+	}
+	if !kept["2.314.0"] {
+		t.Errorf("active version 2.314.0 was removed")
+	}
+	if !kept["2.313.0"] || !kept["2.312.0"] {
+		t.Errorf("recent versions were removed: %v", kept)
+	}
+	if kept["2.310.0"] || kept["2.311.0"] {
+		t.Errorf("old versions still present: %v", kept)
+	}
+}
+
+func TestGCOldVersions_IgnoresIncompleteCaches(t *testing.T) {
+	cacheDir := t.TempDir()
+	bm := NewBinaryManager(cacheDir, silentLogger())
+
+	// "old" has a marker, "incomplete" doesn't.
+	for _, v := range []string{"2.310.0", "incomplete"} {
+		dir := filepath.Join(cacheDir, v)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(cacheDir, "2.310.0", ".complete"), nil, 0o644); err != nil {
+		t.Fatalf("write marker: %v", err)
+	}
+
+	if err := bm.gcOldVersions(context.Background(), "2.314.0"); err != nil {
+		t.Fatalf("gcOldVersions: %v", err)
+	}
+
+	// "incomplete" should remain because gc ignores caches without the marker.
+	for _, want := range []string{"2.310.0", "incomplete"} {
+		if _, err := os.Stat(filepath.Join(cacheDir, want)); err != nil {
+			t.Errorf("expected %s to remain: %v", want, err)
+		}
+	}
+}
+
 func TestRunnerArch(t *testing.T) {
 	got := runnerArch()
 	switch runtime.GOARCH {
