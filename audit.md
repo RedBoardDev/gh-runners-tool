@@ -372,12 +372,6 @@ if _, err := os.Stat(filepath.Join(destDir, ".complete")); err == nil {
 os.WriteFile(filepath.Join(destDir, ".complete"), nil, 0o644)
 ```
 
-### II.3 🔴 HAUTE — Logging des secrets potentiel via `validateAndSave`
-
-**Fichier** : `internal/cli/login.go:108-125`.
-
-OK, ne log pas le PAT. Mais `auth.Validate` (validate.go:46-48) inclut le body dans l'erreur retournée à l'utilisateur. Body peut contenir des entêtes de debug. Cf. I.14.
-
 ### II.5 🔴 HAUTE — `RunnerGroupID: 1` hardcoded
 
 **Fichier** : `internal/cli/daemon.go:73`.

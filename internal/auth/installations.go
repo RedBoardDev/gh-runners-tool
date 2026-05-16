@@ -151,16 +151,3 @@ func hasWrite(perms map[string]string, key string) bool {
 	v, ok := perms[key]
 	return ok && (v == "write" || v == "admin")
 }
-
-func drainBody(resp *http.Response) {
-	_, _ = io.Copy(io.Discard, resp.Body)
-	resp.Body.Close()
-}
-
-func truncateBody(s string) string {
-	const maxBodyLen = 500
-	if len(s) > maxBodyLen {
-		return s[:maxBodyLen] + "..."
-	}
-	return s
-}
