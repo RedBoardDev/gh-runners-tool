@@ -12,6 +12,7 @@ import (
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/config"
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/github"
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/launchd"
+	"github.com/RedBoardDev/gh-runners-tool/v2/internal/state"
 	"github.com/spf13/cobra"
 )
 
@@ -99,7 +100,7 @@ func purgeScaleSets(ctx context.Context, ghClient *github.Client, cfg *config.Co
 	deletedSets := 0
 	for _, g := range cfg.Groups {
 		fmt.Printf("purging scale set %q...\n", g.Name)
-		ss, getErr := ghClient.GetScaleSet(ctx, 1, g.Name)
+		ss, getErr := ghClient.GetScaleSet(ctx, cfg.GitHub.RunnerGroupID, g.Name)
 		if getErr != nil {
 			fmt.Printf("  scale set %q not found, skipping\n", g.Name)
 			continue
@@ -171,11 +172,9 @@ func cleanupWorkdirs(workdirBase string) int {
 }
 
 func cleanupStateFiles(stateDir string) {
-	for _, name := range []string{"daemon.pid", "daemon.state.json", "ghr.sock"} {
-		p := filepath.Join(stateDir, name)
-		rmErr := os.Remove(p)
-		if rmErr != nil && !os.IsNotExist(rmErr) {
-			fmt.Printf("  failed to remove %s: %v\n", p, rmErr)
+	for _, p := range state.New(stateDir).All() {
+		if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
+			fmt.Printf("  failed to remove %s: %v\n", p, err)
 		}
 	}
 }

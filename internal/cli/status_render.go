@@ -16,7 +16,7 @@ type statusResponse struct {
 type statusRunner struct {
 	Name    string `json:"name"`
 	State   string `json:"state"`
-	PID     int    `json:"pid"`
+	PID     int32  `json:"pid"`
 	JobName string `json:"job_name"`
 }
 

@@ -2,37 +2,40 @@ package launchd
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
+	"strconv"
 )
 
-func launchctlLoad(plistPath string) error {
-	out, err := exec.Command("launchctl", "load", plistPath).CombinedOutput()
+// domainTarget returns the launchctl service target prefix
+// (e.g. "gui/501" or "system") suitable for bootstrap/bootout/kickstart.
+func domainTarget() string {
+	if os.Getuid() == 0 {
+		return "system"
+	}
+	return "gui/" + strconv.Itoa(os.Getuid())
+}
+
+func launchctlBootstrap(plistPath string) error {
+	out, err := exec.Command("launchctl", "bootstrap", domainTarget(), plistPath).CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("launchctl load: %w: %s", err, string(out))
+		return fmt.Errorf("launchctl bootstrap: %w: %s", err, string(out))
 	}
 	return nil
 }
 
-func launchctlUnload(plistPath string) error {
-	out, err := exec.Command("launchctl", "unload", plistPath).CombinedOutput()
+func launchctlBootout(label string) error {
+	out, err := exec.Command("launchctl", "bootout", domainTarget()+"/"+label).CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("launchctl unload: %w: %s", err, string(out))
+		return fmt.Errorf("launchctl bootout: %w: %s", err, string(out))
 	}
 	return nil
 }
 
-func launchctlStart(label string) error {
-	out, err := exec.Command("launchctl", "start", label).CombinedOutput()
+func launchctlKickstart(label string) error {
+	out, err := exec.Command("launchctl", "kickstart", "-k", domainTarget()+"/"+label).CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("launchctl start: %w: %s", err, string(out))
-	}
-	return nil
-}
-
-func launchctlStop(label string) error {
-	out, err := exec.Command("launchctl", "stop", label).CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("launchctl stop: %w: %s", err, string(out))
+		return fmt.Errorf("launchctl kickstart: %w: %s", err, string(out))
 	}
 	return nil
 }

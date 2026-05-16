@@ -23,7 +23,16 @@ func FilePath() string {
 }
 
 func loadFromFile() (*Credentials, error) {
-	data, err := os.ReadFile(FilePath())
+	path := FilePath()
+	if info, err := os.Stat(path); err == nil {
+		if mode := info.Mode().Perm(); mode&0o077 != 0 {
+			fmt.Fprintf(os.Stderr,
+				"warning: credentials file %s has permissions %#o; tighten with: chmod 600 %s\n",
+				path, mode, path)
+		}
+	}
+
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}

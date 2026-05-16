@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/auth"
 	"github.com/spf13/cobra"
@@ -14,16 +13,16 @@ func newLoginCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "login",
 		Short: "Authenticate with GitHub",
-		Long:  "Interactive wizard to configure GitHub authentication. Supports PAT and GitHub App.",
+		Long:  "Interactive wizard to configure GitHub authentication. GitHub App (recommended) or PAT.",
 		RunE:  runLogin,
 	}
 
-	cmd.Flags().String("method", "", "auth method: pat or app")
-	cmd.Flags().String("url", "", "GitHub URL (org, repo, or enterprise)")
+	cmd.Flags().String("method", "", "auth method: app or pat (interactive if empty)")
+	cmd.Flags().String("url", "", "GitHub URL for PAT mode (org or repo)")
+	cmd.Flags().String("host", "", "GitHub host URL for App mode (default https://github.com)")
 	cmd.Flags().String("client-id", "", "GitHub App client ID")
-	cmd.Flags().Int64("installation-id", 0, "GitHub App installation ID")
+	cmd.Flags().Int64("installation-id", 0, "GitHub App installation ID (auto-detected if only one)")
 	cmd.Flags().String("private-key", "", "path to GitHub App private key (.pem)")
-
 	return cmd
 }
 
@@ -32,68 +31,79 @@ func runLogin(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return fmt.Errorf("get method flag: %w", err)
 	}
-
 	if method == "" {
-		reader := bufio.NewReader(os.Stdin)
-		return interactiveLogin(cmd, reader)
+		return interactiveLogin(cmd, bufio.NewReader(os.Stdin))
 	}
-
 	return nonInteractiveLogin(cmd, method)
 }
 
 func nonInteractiveLogin(cmd *cobra.Command, method string) error {
+	switch method {
+	case "pat":
+		return nonInteractivePAT(cmd)
+	case "app", "github_app":
+		return nonInteractiveApp(cmd)
+	default:
+		return fmt.Errorf("unknown method %q (expected 'app' or 'pat')", method)
+	}
+}
+
+func nonInteractivePAT(cmd *cobra.Command) error {
+	if tokenFlag == "" {
+		return fmt.Errorf("--token is required for PAT method")
+	}
 	url, err := cmd.Flags().GetString("url")
 	if err != nil {
 		return fmt.Errorf("get url flag: %w", err)
 	}
+	if url == "" {
+		return fmt.Errorf("--url is required for PAT method")
+	}
+	creds := &auth.Credentials{
+		Method:    "pat",
+		GitHubURL: url,
+		PAT:       tokenFlag,
+	}
+	return validateAndSave(cmd, creds)
+}
 
-	var creds *auth.Credentials
-
-	switch method {
-	case "pat":
-		if tokenFlag == "" {
-			return fmt.Errorf("--token is required for PAT authentication")
-		}
-		if url == "" {
-			return fmt.Errorf("--url is required")
-		}
-		creds = &auth.Credentials{
-			Method:    "pat",
-			GitHubURL: url,
-			PAT:       tokenFlag,
-		}
-
-	case "app":
-		clientID, flagErr := cmd.Flags().GetString("client-id")
-		if flagErr != nil {
-			return fmt.Errorf("get client-id flag: %w", flagErr)
-		}
-		installationID, flagErr := cmd.Flags().GetInt64("installation-id")
-		if flagErr != nil {
-			return fmt.Errorf("get installation-id flag: %w", flagErr)
-		}
-		privateKey, flagErr := cmd.Flags().GetString("private-key")
-		if flagErr != nil {
-			return fmt.Errorf("get private-key flag: %w", flagErr)
-		}
-		if clientID == "" || installationID == 0 || privateKey == "" || url == "" {
-			return fmt.Errorf("--client-id, --installation-id, --private-key, and --url are all required for GitHub App authentication")
-		}
-		creds = &auth.Credentials{
-			Method:    "github_app",
-			GitHubURL: url,
-			GitHubApp: &auth.GitHubAppCreds{
-				ClientID:       clientID,
-				InstallationID: installationID,
-				PrivateKeyPath: privateKey,
-			},
-		}
-
-	default:
-		return fmt.Errorf("unknown method %q: must be 'pat' or 'app'", method)
+func nonInteractiveApp(cmd *cobra.Command) error {
+	clientID, err := cmd.Flags().GetString("client-id")
+	if err != nil {
+		return fmt.Errorf("get client-id flag: %w", err)
+	}
+	privateKey, err := cmd.Flags().GetString("private-key")
+	if err != nil {
+		return fmt.Errorf("get private-key flag: %w", err)
+	}
+	host, err := cmd.Flags().GetString("host")
+	if err != nil {
+		return fmt.Errorf("get host flag: %w", err)
+	}
+	installationID, err := cmd.Flags().GetInt64("installation-id")
+	if err != nil {
+		return fmt.Errorf("get installation-id flag: %w", err)
 	}
 
-	return validateAndSave(cmd, creds)
+	in := appLoginInput{
+		clientID:       clientID,
+		privateKeyPath: expandHome(privateKey),
+		hostURL:        host,
+		installationID: installationID,
+	}
+	prep, err := prepareAppLogin(cmd.Context(), in)
+	if err != nil {
+		return err
+	}
+	inst, err := resolveInstallation(prep.installations, in.installationID)
+	if err != nil {
+		return err
+	}
+	creds, err := finalizeAppLogin(cmd.Context(), prep, inst, in)
+	if err != nil {
+		return err
+	}
+	return saveCreds(creds)
 }
 
 func validateAndSave(cmd *cobra.Command, creds *auth.Credentials) error {
@@ -102,22 +112,32 @@ func validateAndSave(cmd *cobra.Command, creds *auth.Credentials) error {
 	if err != nil {
 		return fmt.Errorf("validation failed: %w", err)
 	}
-
 	if !result.Valid {
 		return fmt.Errorf("credentials are not valid")
 	}
-
 	if err := auth.Save(creds); err != nil {
 		return fmt.Errorf("save credentials: %w", err)
 	}
-
 	if creds.Method == "pat" && result.Username != "" {
 		fmt.Printf("✓ Authenticated as @%s\n", result.Username)
 	}
-	if creds.Method == "pat" && len(result.Scopes) > 0 {
-		fmt.Printf("✓ Scopes: %s\n", strings.Join(result.Scopes, ", "))
-	}
 	fmt.Printf("✓ Credentials saved to %s\n", auth.FilePath())
+	return nil
+}
 
+func saveCreds(creds *auth.Credentials) error {
+	if err := auth.Save(creds); err != nil {
+		return fmt.Errorf("save credentials: %w", err)
+	}
+	fmt.Println()
+	fmt.Println("✓ Authentication successful")
+	if creds.GitHubApp != nil {
+		fmt.Printf("  Method:       github_app\n")
+		fmt.Printf("  Account:      @%s\n", creds.GitHubApp.Account)
+		fmt.Printf("  Installation: %d\n", creds.GitHubApp.InstallationID)
+		fmt.Printf("  URL:          %s\n", creds.GitHubURL)
+		fmt.Printf("  Key:          %s\n", creds.GitHubApp.PrivateKeyPath)
+	}
+	fmt.Printf("  Saved to:     %s\n", auth.FilePath())
 	return nil
 }

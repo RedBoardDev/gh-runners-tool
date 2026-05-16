@@ -56,37 +56,35 @@ func (m *ProcessManager) cleanupStaleRunner(ctx context.Context, group, runner s
 	pidBytes, err := os.ReadFile(pidFile)
 	if err != nil {
 		m.logger.DebugContext(ctx, "no PID file found, removing stale workdir", "dir", runnerDir)
-		removeErr := os.RemoveAll(runnerDir)
-		if removeErr != nil {
-			m.logger.WarnContext(ctx, "failed to remove stale workdir", "dir", runnerDir, "error", removeErr)
-		}
+		m.removeStaleDir(ctx, runnerDir)
 		return
 	}
 
 	pid, err := strconv.Atoi(strings.TrimSpace(string(pidBytes)))
 	if err != nil {
 		m.logger.WarnContext(ctx, "invalid PID file content, removing workdir", "dir", runnerDir, "error", err)
-		removeErr := os.RemoveAll(runnerDir)
-		if removeErr != nil {
-			m.logger.WarnContext(ctx, "failed to remove stale workdir", "dir", runnerDir, "error", removeErr)
-		}
+		m.removeStaleDir(ctx, runnerDir)
 		return
 	}
 
 	if isProcessAlive(pid) {
 		m.logger.WarnContext(ctx, "killing stale runner process", "pid", pid, "runner", runner, "group", group)
-		killErr := syscall.Kill(pid, syscall.SIGKILL)
-		if killErr != nil {
+		if killErr := syscall.Kill(pid, syscall.SIGKILL); killErr != nil {
 			m.logger.WarnContext(ctx, "failed to kill stale process", "pid", pid, "error", killErr)
 		}
 	}
 
-	removeErr := os.RemoveAll(runnerDir)
-	if removeErr != nil {
-		m.logger.WarnContext(ctx, "failed to remove stale workdir", "dir", runnerDir, "error", removeErr)
-	} else {
+	if m.removeStaleDir(ctx, runnerDir) {
 		m.logger.InfoContext(ctx, "cleaned up stale runner", "runner", runner, "group", group, "pid", pid)
 	}
+}
+
+func (m *ProcessManager) removeStaleDir(ctx context.Context, dir string) bool {
+	if err := os.RemoveAll(dir); err != nil {
+		m.logger.WarnContext(ctx, "failed to remove stale workdir", "dir", dir, "error", err)
+		return false
+	}
+	return true
 }
 
 func (m *ProcessManager) KillOrphanRunners(ctx context.Context) {
@@ -99,9 +97,28 @@ func (m *ProcessManager) KillOrphanRunners(ctx context.Context) {
 		if err != nil || pid <= 0 {
 			continue
 		}
+		if !m.processBelongsToGhr(ctx, pid) {
+			m.logger.DebugContext(ctx, "ignoring pgrep match not owned by ghr", "pid", pid)
+			continue
+		}
 		m.logger.WarnContext(ctx, "killing orphan runner process", "pid", pid)
-		_ = syscall.Kill(pid, syscall.SIGKILL)
+		if killErr := syscall.Kill(pid, syscall.SIGKILL); killErr != nil {
+			m.logger.WarnContext(ctx, "failed to kill orphan runner", "pid", pid, "error", killErr)
+		}
 	}
+}
+
+func (m *ProcessManager) processBelongsToGhr(ctx context.Context, pid int) bool {
+	out, err := exec.CommandContext(ctx, "ps", "-p", strconv.Itoa(pid), "-o", "command=").Output()
+	if err != nil {
+		return false
+	}
+	cmd := strings.TrimSpace(string(out))
+	if cmd == "" {
+		return false
+	}
+	prefix := strings.TrimRight(m.workdirBase, string(os.PathSeparator)) + string(os.PathSeparator)
+	return strings.Contains(cmd, prefix) && strings.Contains(cmd, "/run.sh")
 }
 
 func isProcessAlive(pid int) bool {

@@ -372,6 +372,36 @@ func TestRunnerLogger(t *testing.T) {
 	}
 }
 
+func TestRemoveRunnerLogs(t *testing.T) {
+	mgr := newTestManager(t)
+
+	w, err := mgr.RunnerOutputFile("group-a", "runner-1")
+	if err != nil {
+		t.Fatalf("RunnerOutputFile() error = %v", err)
+	}
+	if _, err := w.Write([]byte("hello\n")); err != nil {
+		t.Fatalf("write runner output: %v", err)
+	}
+
+	runnerDir := filepath.Join(mgr.rootDir, "groups", "group-a", "runners", "runner-1")
+	if _, statErr := os.Stat(runnerDir); statErr != nil {
+		t.Fatalf("runner log dir missing before cleanup: %v", statErr)
+	}
+
+	if err := mgr.RemoveRunnerLogs("group-a", "runner-1"); err != nil {
+		t.Fatalf("RemoveRunnerLogs() error = %v", err)
+	}
+
+	if _, statErr := os.Stat(runnerDir); !os.IsNotExist(statErr) {
+		t.Errorf("runner log dir still present after cleanup: %v", statErr)
+	}
+
+	// Removing again must be a no-op (idempotency contract).
+	if err := mgr.RemoveRunnerLogs("group-a", "runner-1"); err != nil {
+		t.Errorf("RemoveRunnerLogs() second call error = %v", err)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // TestDateRotation
 // ---------------------------------------------------------------------------

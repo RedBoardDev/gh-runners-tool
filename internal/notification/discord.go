@@ -16,6 +16,10 @@ import (
 
 const discordMinInterval = 400 * time.Millisecond
 
+// discordServerErrorBackoff is the wait between a 5xx response and the retry.
+// Overridable from tests via the test-only helper in discord_test_helper.go.
+var discordServerErrorBackoff = 2 * time.Second
+
 type DiscordConfig struct {
 	WebhookURL string
 	Username   string
@@ -54,35 +58,51 @@ func (d *DiscordProvider) Send(ctx context.Context, event *model.Event) error {
 		return fmt.Errorf("marshal discord payload: %w", err)
 	}
 
-	resp, err := d.doPost(ctx, body)
+	resp, err := d.postWithRateLimitRetry(ctx, body)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusTooManyRequests {
-		retryAfter := parseRetryAfter(resp.Header.Get("Retry-After"))
-		_, _ = io.Copy(io.Discard, resp.Body)
-		resp.Body.Close()
-
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("discord rate limited, context canceled: %w", ctx.Err())
-		case <-time.After(retryAfter):
-		}
-
-		resp, err = d.doPost(ctx, body)
-		if err != nil {
-			return err
-		}
-		defer resp.Body.Close()
-	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("discord webhook returned status %d", resp.StatusCode)
 	}
 
 	return nil
+}
+
+func (d *DiscordProvider) postWithRateLimitRetry(ctx context.Context, body []byte) (*http.Response, error) {
+	resp, err := d.doPost(ctx, body)
+	if err != nil {
+		return nil, err
+	}
+
+	switch {
+	case resp.StatusCode == http.StatusTooManyRequests:
+		retryAfter := parseRetryAfter(resp.Header.Get("Retry-After"))
+		_, _ = io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("discord rate limited, context canceled: %w", ctx.Err())
+		case <-time.After(retryAfter):
+		}
+		return d.doPost(ctx, body)
+
+	case resp.StatusCode >= 500:
+		_, _ = io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("discord 5xx, context canceled: %w", ctx.Err())
+		case <-time.After(discordServerErrorBackoff):
+		}
+		return d.doPost(ctx, body)
+	}
+
+	return resp, nil
 }
 
 func (d *DiscordProvider) throttle() {

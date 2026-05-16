@@ -65,3 +65,32 @@ func TestGeneratePlist_SpecialChars(t *testing.T) {
 		t.Error("plist should preserve paths with spaces")
 	}
 }
+
+func TestGeneratePlist_EscapesXMLMetacharacters(t *testing.T) {
+	cfg := ServiceConfig{
+		Label:      "com.ghr.injected",
+		BinaryPath: `/tmp/x</string><key>InjectedKey</key><string>yes`,
+		ConfigPath: "/config/<test>&yaml",
+		LogDir:     "/tmp/log\"dir",
+		StateDir:   "/tmp/state",
+	}
+
+	data, err := generatePlist(&cfg)
+	if err != nil {
+		t.Fatalf("generatePlist() error = %v", err)
+	}
+	out := string(data)
+
+	if strings.Contains(out, "<key>InjectedKey</key>") {
+		t.Errorf("plist must escape XML payload, got: %s", out)
+	}
+	for _, needle := range []string{
+		"&lt;/string&gt;",
+		"&lt;key&gt;InjectedKey&lt;/key&gt;",
+		"/config/&lt;test&gt;&amp;yaml",
+	} {
+		if !strings.Contains(out, needle) {
+			t.Errorf("expected escaped %q in plist, got: %s", needle, out)
+		}
+	}
+}

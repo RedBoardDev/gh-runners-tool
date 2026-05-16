@@ -3,8 +3,29 @@ package config
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
+	"regexp"
 	"time"
 )
+
+var labelPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
+
+// unsafeWorkdirBase enumerates directories ghr must refuse to claim as its
+// runner workdir root. Substring matches by tools like `pgrep -f` would
+// otherwise sweep up arbitrary user processes.
+var unsafeWorkdirBase = map[string]struct{}{
+	"/":     {},
+	"/tmp":  {},
+	"/var":  {},
+	"/usr":  {},
+	"/etc":  {},
+	"/home": {},
+	"/root": {},
+	"/opt":  {},
+	"/bin":  {},
+	"/sbin": {},
+	"/dev":  {},
+}
 
 func validate(cfg *Config) error {
 	var errs []error
@@ -40,8 +61,29 @@ func validate(cfg *Config) error {
 		}
 
 		for j, label := range g.Labels {
-			if label == "" {
+			switch {
+			case label == "":
 				errs = append(errs, fmt.Errorf("%s (%s): labels[%d] must not be empty", prefix, g.Name, j))
+			case !labelPattern.MatchString(label):
+				errs = append(errs, fmt.Errorf("%s (%s): labels[%d] %q must match %s", prefix, g.Name, j, label, labelPattern.String()))
+			}
+		}
+	}
+
+	if cfg.GitHub.RunnerGroupID < 1 {
+		errs = append(errs, fmt.Errorf("github.runner_group_id must be >= 1, got %d", cfg.GitHub.RunnerGroupID))
+	}
+
+	if cfg.Runner.WorkdirBase != "" {
+		clean := filepath.Clean(cfg.Runner.WorkdirBase)
+		switch {
+		case !filepath.IsAbs(cfg.Runner.WorkdirBase):
+			errs = append(errs, fmt.Errorf("runner.workdir_base must be absolute, got %q", cfg.Runner.WorkdirBase))
+		default:
+			if _, banned := unsafeWorkdirBase[clean]; banned {
+				errs = append(errs, fmt.Errorf("runner.workdir_base must not be a top-level system directory, got %q", cfg.Runner.WorkdirBase))
+			} else if len(clean) < 8 {
+				errs = append(errs, fmt.Errorf("runner.workdir_base %q is too short (orphan-process matching would be unsafe)", cfg.Runner.WorkdirBase))
 			}
 		}
 	}

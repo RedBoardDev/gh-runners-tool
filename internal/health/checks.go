@@ -13,13 +13,14 @@ func (m *Monitor) runChecks(ctx context.Context) {
 	start := time.Now()
 
 	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	m.issues = m.issues[:0]
 
 	snapshots := m.runners.Snapshots()
 	totalActual := 0
 	totalDesired := 0
+
+	groupActuals := make(map[string]int, len(snapshots))
+	groupDesireds := make(map[string]int, len(snapshots))
 
 	for group, snaps := range snapshots {
 		m.checkRunnerLiveness(ctx, group, snaps)
@@ -30,24 +31,54 @@ func (m *Monitor) runChecks(ctx context.Context) {
 		m.checkConsecutiveFailures(group, gs)
 		totalActual += len(snaps)
 		totalDesired += gs.lastDesiredCount
+		groupActuals[group] = len(snaps)
+		groupDesireds[group] = gs.lastDesiredCount
 	}
 
 	m.checkDiskSpace()
 	m.lastCheck = time.Now()
 	checkDuration := time.Since(start)
 
-	for _, r := range m.reporters {
-		r.ReportDaemonHealth(ctx, len(snapshots), totalActual, totalDesired, checkDuration)
+	issuesCopy := make([]model.HealthIssue, len(m.issues))
+	copy(issuesCopy, m.issues)
+	reporters := m.reporters
+	notifier := m.notifier
+	groupsCount := len(snapshots)
+	m.mu.Unlock()
+
+	go dispatchHealthReports(ctx, reporters, notifier, dispatchPayload{
+		groupsCount:   groupsCount,
+		totalActual:   totalActual,
+		totalDesired:  totalDesired,
+		checkDuration: checkDuration,
+		groupActuals:  groupActuals,
+		groupDesireds: groupDesireds,
+		issues:        issuesCopy,
+	})
+}
+
+type dispatchPayload struct {
+	groupsCount   int
+	totalActual   int
+	totalDesired  int
+	checkDuration time.Duration
+	groupActuals  map[string]int
+	groupDesireds map[string]int
+	issues        []model.HealthIssue
+}
+
+func dispatchHealthReports(ctx context.Context, reporters []Reporter, notifier Notifier, p dispatchPayload) {
+	for _, r := range reporters {
+		r.ReportDaemonHealth(ctx, p.groupsCount, p.totalActual, p.totalDesired, p.checkDuration)
 	}
-	for group, snaps := range snapshots {
-		gs := m.getOrCreateGroup(group)
-		for _, r := range m.reporters {
-			r.ReportGroupHealth(ctx, group, len(snaps), gs.lastDesiredCount)
+	for group, actual := range p.groupActuals {
+		desired := p.groupDesireds[group]
+		for _, r := range reporters {
+			r.ReportGroupHealth(ctx, group, actual, desired)
 		}
 	}
-
-	for _, issue := range m.issues {
-		m.notifier.Notify(ctx, &model.Event{
+	for _, issue := range p.issues {
+		notifier.Notify(ctx, &model.Event{
 			Type:      issue.Type,
 			Level:     issue.Level,
 			Group:     issue.Group,
@@ -63,7 +94,7 @@ func (m *Monitor) checkRunnerLiveness(ctx context.Context, group string, snapsho
 		if snap.PID <= 0 {
 			continue
 		}
-		if err := syscall.Kill(snap.PID, 0); err != nil {
+		if err := syscall.Kill(int(snap.PID), 0); err != nil {
 			m.issues = append(m.issues, model.HealthIssue{
 				Level:      model.LevelError,
 				Type:       model.EventHealthZombieRunner,

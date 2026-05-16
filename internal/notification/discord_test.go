@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -241,5 +242,36 @@ func TestColorForLevel(t *testing.T) {
 				t.Errorf("colorForLevel(%q) = %d, want %d", tt.level, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestDiscordProvider_Send_RetryOn5xx(t *testing.T) {
+	var calls int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		n := atomic.AddInt32(&calls, 1)
+		if n == 1 {
+			w.WriteHeader(http.StatusBadGateway)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	// Shorten the 5xx backoff to keep the test snappy.
+	oldBackoff := discordTestBackoffOverride()
+	t.Cleanup(oldBackoff)
+
+	d := NewDiscord(&DiscordConfig{WebhookURL: srv.URL})
+
+	err := d.Send(context.Background(), &model.Event{
+		Type:      "test.event",
+		Level:     model.LevelInfo,
+		Timestamp: time.Now(),
+	})
+	if err != nil {
+		t.Fatalf("Send() error = %v", err)
+	}
+	if got := atomic.LoadInt32(&calls); got != 2 {
+		t.Errorf("expected 2 webhook calls (1 5xx + 1 retry), got %d", got)
 	}
 }

@@ -18,13 +18,15 @@ import (
 
 const stopGracePeriod = 10 * time.Second
 
+const killTimeout = 5 * time.Second
+
 type Process struct {
 	Name      string
 	Group     string
 	WorkDir   string
-	PID       int
+	PID       int32
 	StartedAt time.Time
-	Cmd       *exec.Cmd
+	cmd       *exec.Cmd
 }
 
 type ProcessManager struct {
@@ -66,31 +68,32 @@ func (m *ProcessManager) Start(ctx context.Context, instance *model.RunnerInstan
 		return nil, fmt.Errorf("start runner %s: %w", instance.Name, err)
 	}
 
+	pid := int32(cmd.Process.Pid)
 	pidFile := filepath.Join(workdir, ".ghr-pid")
-	if err := os.WriteFile(pidFile, []byte(strconv.Itoa(cmd.Process.Pid)), 0o644); err != nil {
+	if err := os.WriteFile(pidFile, []byte(strconv.FormatInt(int64(pid), 10)), 0o644); err != nil {
 		m.logger.WarnContext(ctx, "failed to write PID file", "path", pidFile, "error", err)
 	}
 
-	m.logger.InfoContext(ctx, "runner started", "runner", instance.Name, "pid", cmd.Process.Pid)
+	m.logger.InfoContext(ctx, "runner started", "runner", instance.Name, "pid", pid)
 
 	return &Process{
 		Name:      instance.Name,
 		Group:     instance.Group,
 		WorkDir:   workdir,
-		PID:       cmd.Process.Pid,
+		PID:       pid,
 		StartedAt: time.Now(),
-		Cmd:       cmd,
+		cmd:       cmd,
 	}, nil
 }
 
 func (m *ProcessManager) Stop(ctx context.Context, proc *Process) error {
-	if proc.Cmd == nil || proc.Cmd.Process == nil {
+	if proc.cmd == nil || proc.cmd.Process == nil {
 		return nil
 	}
 
 	m.logger.InfoContext(ctx, "stopping runner", "runner", proc.Name, "pid", proc.PID)
 
-	if err := proc.Cmd.Process.Signal(syscall.SIGTERM); err != nil {
+	if err := proc.cmd.Process.Signal(syscall.SIGTERM); err != nil {
 		if isProcessFinished(err) {
 			return nil
 		}
@@ -99,7 +102,7 @@ func (m *ProcessManager) Stop(ctx context.Context, proc *Process) error {
 
 	done := make(chan error, 1)
 	go func() {
-		done <- proc.Cmd.Wait()
+		done <- proc.cmd.Wait()
 	}()
 
 	select {
@@ -110,10 +113,18 @@ func (m *ProcessManager) Stop(ctx context.Context, proc *Process) error {
 		return err
 	case <-time.After(stopGracePeriod):
 		m.logger.WarnContext(ctx, "runner did not exit after SIGTERM, sending SIGKILL", "runner", proc.Name, "pid", proc.PID)
-		if err := proc.Cmd.Process.Kill(); err != nil {
+		if err := proc.cmd.Process.Kill(); err != nil {
 			return fmt.Errorf("kill runner %s (pid %d): %w", proc.Name, proc.PID, err)
 		}
-		return <-done
+		select {
+		case err := <-done:
+			if isExpectedExit(err) {
+				return nil
+			}
+			return err
+		case <-time.After(killTimeout):
+			return fmt.Errorf("runner %s (pid %d) did not exit after SIGKILL within %s", proc.Name, proc.PID, killTimeout)
+		}
 	}
 }
 

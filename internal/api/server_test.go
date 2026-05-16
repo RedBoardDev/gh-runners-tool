@@ -1,11 +1,13 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -189,5 +191,48 @@ func TestHandleStatus_EmptyGroups(t *testing.T) {
 
 	if len(body.Groups) != 0 {
 		t.Fatalf("expected 0 groups, got %d", len(body.Groups))
+	}
+}
+
+func TestServer_Run_SocketPermissions(t *testing.T) {
+	// Unix domain sockets on macOS cap at ~104 chars, so avoid t.TempDir() which
+	// returns long /var/folders/... paths. Use a short directory under /tmp.
+	stateDir, err := os.MkdirTemp("/tmp", "ghr-sock-")
+	if err != nil {
+		t.Fatalf("mkdir temp: %v", err)
+	}
+	t.Cleanup(func() { os.RemoveAll(stateDir) })
+
+	srv := NewServer(stateDir, &mockController{}, &mockHealth{},
+		slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError + 1})))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- srv.Run(ctx) }()
+
+	socket := filepath.Join(stateDir, "ghr.sock")
+	deadline := time.Now().Add(2 * time.Second)
+	var info os.FileInfo
+	for time.Now().Before(deadline) {
+		if info, err = os.Stat(socket); err == nil {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	if err != nil {
+		cancel()
+		<-done
+		t.Fatalf("stat socket: %v", err)
+	}
+	mode := info.Mode().Perm()
+
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatalf("server run: %v", err)
+	}
+
+	if mode != 0o600 {
+		t.Fatalf("socket perm = %#o, want 0600", mode)
 	}
 }

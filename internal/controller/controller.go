@@ -73,14 +73,15 @@ func (c *GroupController) Run(ctx context.Context) error {
 	var wg sync.WaitGroup
 	errCh := make(chan error, len(c.groups))
 
-	for _, g := range c.groups {
+	for i := range c.groups {
+		group := &c.groups[i]
 		wg.Add(1)
-		go func(group *config.GroupConfig) {
+		go func() {
 			defer wg.Done()
 			if err := c.runGroup(ctx, group); err != nil {
 				errCh <- err
 			}
-		}(&g)
+		}()
 	}
 
 	<-ctx.Done()

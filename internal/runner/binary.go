@@ -9,20 +9,26 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
+	"sync"
+	"time"
 )
 
 type BinaryManager struct {
 	cacheDir   string
 	logger     *slog.Logger
 	httpClient *http.Client
+	locks      sync.Map
 }
 
 func NewBinaryManager(cacheDir string, logger *slog.Logger) *BinaryManager {
 	return &BinaryManager{
-		cacheDir:   cacheDir,
-		logger:     logger,
-		httpClient: &http.Client{},
+		cacheDir: cacheDir,
+		logger:   logger,
+		httpClient: &http.Client{
+			Timeout: 10 * time.Minute,
+		},
 	}
 }
 
@@ -37,12 +43,23 @@ func (m *BinaryManager) EnsureBits(ctx context.Context, version string) (string,
 		m.logger.InfoContext(ctx, "resolved latest runner version", "version", resolved)
 	}
 
-	destDir := filepath.Join(m.cacheDir, resolved)
-	runShPath := filepath.Join(destDir, "run.sh")
+	mu := m.lockFor(resolved)
+	mu.Lock()
+	defer mu.Unlock()
 
-	if _, err := os.Stat(runShPath); err == nil {
+	destDir := filepath.Join(m.cacheDir, resolved)
+	marker := filepath.Join(destDir, ".complete")
+
+	if _, err := os.Stat(marker); err == nil {
 		m.logger.DebugContext(ctx, "runner binary cached", "version", resolved, "path", destDir)
 		return destDir, nil
+	}
+
+	if _, err := os.Stat(destDir); err == nil {
+		m.logger.WarnContext(ctx, "removing incomplete runner cache", "version", resolved, "path", destDir)
+		if rmErr := os.RemoveAll(destDir); rmErr != nil {
+			return "", fmt.Errorf("clean stale cache %s: %w", destDir, rmErr)
+		}
 	}
 
 	m.logger.InfoContext(ctx, "downloading runner binary", "version", resolved)
@@ -52,15 +69,76 @@ func (m *BinaryManager) EnsureBits(ctx context.Context, version string) (string,
 	}
 
 	if err := downloadAndExtract(ctx, m.httpClient, resolved, destDir); err != nil {
-		rmErr := os.RemoveAll(destDir)
-		if rmErr != nil {
+		if rmErr := os.RemoveAll(destDir); rmErr != nil {
 			m.logger.WarnContext(ctx, "failed to clean partial download", "path", destDir, "error", rmErr)
 		}
 		return "", fmt.Errorf("download runner %s: %w", resolved, err)
 	}
 
+	if err := os.WriteFile(marker, nil, 0o644); err != nil {
+		if rmErr := os.RemoveAll(destDir); rmErr != nil {
+			m.logger.WarnContext(ctx, "failed to clean cache after marker write", "path", destDir, "error", rmErr)
+		}
+		return "", fmt.Errorf("write completion marker %s: %w", marker, err)
+	}
+
 	m.logger.InfoContext(ctx, "runner binary ready", "version", resolved, "path", destDir)
+
+	if err := m.gcOldVersions(ctx, resolved); err != nil {
+		m.logger.WarnContext(ctx, "cache GC failed", "error", err)
+	}
+
 	return destDir, nil
+}
+
+const cacheKeepVersions = 3
+
+func (m *BinaryManager) gcOldVersions(ctx context.Context, keep string) error {
+	entries, err := os.ReadDir(m.cacheDir)
+	if err != nil {
+		return fmt.Errorf("read cache dir: %w", err)
+	}
+
+	type cacheEntry struct {
+		name    string
+		modTime time.Time
+	}
+
+	completed := make([]cacheEntry, 0, len(entries))
+	for _, e := range entries {
+		if !e.IsDir() || e.Name() == keep {
+			continue
+		}
+		marker := filepath.Join(m.cacheDir, e.Name(), ".complete")
+		info, statErr := os.Stat(marker)
+		if statErr != nil {
+			continue
+		}
+		completed = append(completed, cacheEntry{name: e.Name(), modTime: info.ModTime()})
+	}
+
+	if len(completed) <= cacheKeepVersions-1 {
+		return nil
+	}
+
+	sort.Slice(completed, func(i, j int) bool {
+		return completed[i].modTime.After(completed[j].modTime)
+	})
+
+	for _, victim := range completed[cacheKeepVersions-1:] {
+		path := filepath.Join(m.cacheDir, victim.name)
+		if rmErr := os.RemoveAll(path); rmErr != nil {
+			m.logger.WarnContext(ctx, "failed to remove old runner cache", "path", path, "error", rmErr)
+			continue
+		}
+		m.logger.InfoContext(ctx, "removed old runner cache", "version", victim.name)
+	}
+	return nil
+}
+
+func (m *BinaryManager) lockFor(version string) *sync.Mutex {
+	v, _ := m.locks.LoadOrStore(version, &sync.Mutex{})
+	return v.(*sync.Mutex)
 }
 
 func (m *BinaryManager) resolveLatestVersion(ctx context.Context) (string, error) {

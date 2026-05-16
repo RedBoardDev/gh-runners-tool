@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 )
 
 func silentLogger() *slog.Logger {
@@ -79,6 +80,9 @@ func TestEnsureBits_Cached(t *testing.T) {
 	if err := os.WriteFile(runSh, []byte("#!/bin/bash\n"), 0o755); err != nil {
 		t.Fatalf("write run.sh: %v", err)
 	}
+	if err := os.WriteFile(filepath.Join(versionDir, ".complete"), nil, 0o644); err != nil {
+		t.Fatalf("write completion marker: %v", err)
+	}
 
 	bm := NewBinaryManager(cacheDir, silentLogger())
 
@@ -89,6 +93,31 @@ func TestEnsureBits_Cached(t *testing.T) {
 
 	if got != versionDir {
 		t.Fatalf("expected path %q, got %q", versionDir, got)
+	}
+}
+
+func TestEnsureBits_IncompleteCacheIsCleaned(t *testing.T) {
+	cacheDir := t.TempDir()
+	version := "2.320.0"
+
+	versionDir := filepath.Join(cacheDir, version)
+	if err := os.MkdirAll(versionDir, 0o755); err != nil {
+		t.Fatalf("create version dir: %v", err)
+	}
+	// run.sh exists but no .complete marker → previous download was interrupted.
+	if err := os.WriteFile(filepath.Join(versionDir, "run.sh"), []byte("#!/bin/bash\n"), 0o755); err != nil {
+		t.Fatalf("write run.sh: %v", err)
+	}
+
+	bm := NewBinaryManager(cacheDir, silentLogger())
+	// Point at an unreachable host so the redownload fails after the stale dir is removed.
+	bm.httpClient = &http.Client{Timeout: 100 * time.Millisecond}
+	_, err := bm.EnsureBits(context.Background(), version)
+	if err == nil {
+		t.Fatal("expected EnsureBits to attempt re-download, got nil error")
+	}
+	if _, statErr := os.Stat(versionDir); !os.IsNotExist(statErr) {
+		t.Errorf("incomplete cache dir should have been removed, stat err = %v", statErr)
 	}
 }
 
@@ -128,6 +157,9 @@ func TestEnsureBits_Download(t *testing.T) {
 	if err := extractTarGz(resp.Body, versionDir); err != nil {
 		t.Fatalf("extract tar.gz: %v", err)
 	}
+	if err := os.WriteFile(filepath.Join(versionDir, ".complete"), nil, 0o644); err != nil {
+		t.Fatalf("write completion marker: %v", err)
+	}
 
 	runSh := filepath.Join(versionDir, "run.sh")
 	if _, statErr := os.Stat(runSh); statErr != nil {
@@ -146,6 +178,76 @@ func TestEnsureBits_Download(t *testing.T) {
 	}
 	if got != versionDir {
 		t.Fatalf("expected path %q, got %q", versionDir, got)
+	}
+}
+
+func TestGCOldVersions_KeepsRecent(t *testing.T) {
+	cacheDir := t.TempDir()
+	bm := NewBinaryManager(cacheDir, silentLogger())
+
+	versions := []string{"2.310.0", "2.311.0", "2.312.0", "2.313.0", "2.314.0"}
+	for i, v := range versions {
+		dir := filepath.Join(cacheDir, v)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", dir, err)
+		}
+		marker := filepath.Join(dir, ".complete")
+		if err := os.WriteFile(marker, nil, 0o644); err != nil {
+			t.Fatalf("write marker: %v", err)
+		}
+		// Stagger mtimes so the sort by modTime is deterministic.
+		mtime := time.Now().Add(time.Duration(i) * time.Minute)
+		if err := os.Chtimes(marker, mtime, mtime); err != nil {
+			t.Fatalf("chtimes: %v", err)
+		}
+	}
+
+	if err := bm.gcOldVersions(context.Background(), "2.314.0"); err != nil {
+		t.Fatalf("gcOldVersions: %v", err)
+	}
+
+	// 2.314.0 is the active version (excluded from GC); the GC keeps the 2
+	// most recent of the remaining versions (cacheKeepVersions-1).
+	kept := map[string]bool{}
+	entries, _ := os.ReadDir(cacheDir)
+	for _, e := range entries {
+		kept[e.Name()] = true
+	}
+	if !kept["2.314.0"] {
+		t.Errorf("active version 2.314.0 was removed")
+	}
+	if !kept["2.313.0"] || !kept["2.312.0"] {
+		t.Errorf("recent versions were removed: %v", kept)
+	}
+	if kept["2.310.0"] || kept["2.311.0"] {
+		t.Errorf("old versions still present: %v", kept)
+	}
+}
+
+func TestGCOldVersions_IgnoresIncompleteCaches(t *testing.T) {
+	cacheDir := t.TempDir()
+	bm := NewBinaryManager(cacheDir, silentLogger())
+
+	// "old" has a marker, "incomplete" doesn't.
+	for _, v := range []string{"2.310.0", "incomplete"} {
+		dir := filepath.Join(cacheDir, v)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(cacheDir, "2.310.0", ".complete"), nil, 0o644); err != nil {
+		t.Fatalf("write marker: %v", err)
+	}
+
+	if err := bm.gcOldVersions(context.Background(), "2.314.0"); err != nil {
+		t.Fatalf("gcOldVersions: %v", err)
+	}
+
+	// "incomplete" should remain because gc ignores caches without the marker.
+	for _, want := range []string{"2.310.0", "incomplete"} {
+		if _, err := os.Stat(filepath.Join(cacheDir, want)); err != nil {
+			t.Errorf("expected %s to remain: %v", want, err)
+		}
 	}
 }
 

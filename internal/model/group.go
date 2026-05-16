@@ -11,7 +11,6 @@ type Group struct {
 }
 
 type RunnerInstance struct {
-	ID      string
 	Name    string
 	Group   string
 	WorkDir string
@@ -22,7 +21,7 @@ type RunnerSnapshot struct {
 	Name      string    `json:"name"`
 	Group     string    `json:"group"`
 	State     string    `json:"state"`
-	PID       int       `json:"pid"`
+	PID       int32     `json:"pid"`
 	StartedAt time.Time `json:"started_at"`
 	JobName   string    `json:"job_name"`
 	JobID     string    `json:"job_id"`

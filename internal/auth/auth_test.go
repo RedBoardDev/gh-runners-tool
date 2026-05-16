@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -227,6 +228,39 @@ func TestSave_And_Load(t *testing.T) {
 	}
 	if !strings.Contains(source, "file") {
 		t.Errorf("source = %q, want it to contain %q", source, "file")
+	}
+}
+
+func TestLoad_WarnsOnLoosePermissions(t *testing.T) {
+	dir := t.TempDir()
+	credFile := filepath.Join(dir, "credentials.json")
+	t.Setenv("GHR_CREDENTIALS_FILE", credFile)
+	t.Setenv("GITHUB_TOKEN", "")
+
+	creds := &Credentials{Method: "pat", PAT: "ghp_loose", GitHubURL: "https://github.com/x"}
+	if err := Save(creds); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if err := os.Chmod(credFile, 0o644); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe: %v", err)
+	}
+	origStderr := os.Stderr
+	os.Stderr = w
+	defer func() { os.Stderr = origStderr }()
+
+	if _, _, loadErr := Load(LoadOpts{}); loadErr != nil {
+		t.Fatalf("Load: %v", loadErr)
+	}
+	w.Close()
+
+	out, _ := io.ReadAll(r)
+	if !strings.Contains(string(out), "warning") || !strings.Contains(string(out), "chmod 600") {
+		t.Errorf("expected loose-perm warning, got: %q", out)
 	}
 }
 

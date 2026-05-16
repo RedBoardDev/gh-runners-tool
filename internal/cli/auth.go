@@ -32,13 +32,16 @@ func newAuthStatusCmd() *cobra.Command {
 			fmt.Printf("Method:  %s\n", creds.Method)
 			fmt.Printf("Source:  %s\n", source)
 			if creds.GitHubURL != "" {
-				fmt.Printf("GitHub:  %s\n", creds.GitHubURL)
+				fmt.Printf("URL:     %s\n", creds.GitHubURL)
 			}
 			if creds.Method == "pat" && creds.PAT != "" {
 				fmt.Printf("Token:   %s\n", auth.MaskedPAT(creds.PAT))
 			}
 			if creds.GitHubApp != nil {
 				fmt.Printf("Client:  %s\n", creds.GitHubApp.ClientID)
+				if creds.GitHubApp.Account != "" {
+					fmt.Printf("Account: @%s\n", creds.GitHubApp.Account)
+				}
 				fmt.Printf("Install: %d\n", creds.GitHubApp.InstallationID)
 				fmt.Printf("Key:     %s\n", creds.GitHubApp.PrivateKeyPath)
 			}

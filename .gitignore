@@ -38,6 +38,6 @@ Thumbs.db
 *.log
 
 # Runner workdirs (local dev)
-runners/
-cache/
-state/
+/runners/
+/cache/
+/state/

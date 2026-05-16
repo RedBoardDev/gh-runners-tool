@@ -148,6 +148,12 @@ func (s *MacOSScaler) HandleJobCompleted(ctx context.Context, jobInfo *scaleset.
 				"error", cleanupErr,
 			)
 		}
+		if logsErr := s.logMgr.RemoveRunnerLogs(s.groupName, jobInfo.RunnerName); logsErr != nil {
+			s.logger.WarnContext(ctx, "failed to remove runner log dir",
+				"runner", jobInfo.RunnerName,
+				"error", logsErr,
+			)
+		}
 	} else {
 		s.logger.WarnContext(ctx, "job completed for unknown runner",
 			"runner", jobInfo.RunnerName,

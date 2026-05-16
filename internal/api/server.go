@@ -8,10 +8,11 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"path/filepath"
+	"time"
 
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/health"
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/model"
+	"github.com/RedBoardDev/gh-runners-tool/v2/internal/state"
 )
 
 type controllerState interface {
@@ -32,7 +33,7 @@ type Server struct {
 
 func NewServer(stateDir string, controller controllerState, healthProvider healthState, logger *slog.Logger) *Server {
 	return &Server{
-		socketPath: filepath.Join(stateDir, "ghr.sock"),
+		socketPath: state.New(stateDir).Socket(),
 		controller: controller,
 		health:     healthProvider,
 		logger:     logger,
@@ -50,6 +51,12 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 	s.listener = ln
 
+	if chmodErr := os.Chmod(s.socketPath, 0o600); chmodErr != nil {
+		ln.Close()
+		_ = os.Remove(s.socketPath)
+		return fmt.Errorf("chmod socket %s: %w", s.socketPath, chmodErr)
+	}
+
 	srv := &http.Server{
 		Handler: s.routes(),
 	}
@@ -59,22 +66,23 @@ func (s *Server) Run(ctx context.Context) error {
 		errCh <- srv.Serve(ln)
 	}()
 
+	defer func() {
+		if cleanupErr := os.Remove(s.socketPath); cleanupErr != nil && !os.IsNotExist(cleanupErr) {
+			s.logger.Warn("failed to remove socket file", "path", s.socketPath, "error", cleanupErr)
+		}
+	}()
+
 	select {
 	case <-ctx.Done():
-		shutdownErr := srv.Close()
-		cleanupErr := os.Remove(s.socketPath)
+		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		shutdownErr := srv.Shutdown(shutdownCtx)
+		<-errCh
 		if shutdownErr != nil {
 			return fmt.Errorf("shutdown api server: %w", shutdownErr)
 		}
-		if cleanupErr != nil && !os.IsNotExist(cleanupErr) {
-			s.logger.Warn("failed to remove socket file", "path", s.socketPath, "error", cleanupErr)
-		}
 		return nil
 	case err := <-errCh:
-		cleanupErr := os.Remove(s.socketPath)
-		if cleanupErr != nil && !os.IsNotExist(cleanupErr) {
-			s.logger.Warn("failed to remove socket file", "path", s.socketPath, "error", cleanupErr)
-		}
 		if errors.Is(err, http.ErrServerClosed) {
 			return nil
 		}

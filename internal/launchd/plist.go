@@ -2,6 +2,7 @@ package launchd
 
 import (
 	"bytes"
+	"encoding/xml"
 	"fmt"
 	"text/template"
 )
@@ -11,13 +12,13 @@ const plistTemplate = `<?xml version="1.0" encoding="UTF-8"?>
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>{{.Label}}</string>
+    <string>{{xml .Label}}</string>
     <key>ProgramArguments</key>
     <array>
-        <string>{{.BinaryPath}}</string>
+        <string>{{xml .BinaryPath}}</string>
         <string>run</string>
         <string>--config</string>
-        <string>{{.ConfigPath}}</string>
+        <string>{{xml .ConfigPath}}</string>
     </array>
     <key>RunAtLoad</key>
     <true/>
@@ -27,11 +28,11 @@ const plistTemplate = `<?xml version="1.0" encoding="UTF-8"?>
         <false/>
     </dict>
     <key>StandardOutPath</key>
-    <string>{{.LogDir}}/daemon.log</string>
+    <string>{{xml .LogDir}}/daemon.log</string>
     <key>StandardErrorPath</key>
-    <string>{{.LogDir}}/daemon.err</string>
+    <string>{{xml .LogDir}}/daemon.err</string>
     <key>WorkingDirectory</key>
-    <string>{{.StateDir}}</string>
+    <string>{{xml .StateDir}}</string>
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
@@ -41,8 +42,20 @@ const plistTemplate = `<?xml version="1.0" encoding="UTF-8"?>
 </plist>
 `
 
+var plistFuncs = template.FuncMap{
+	"xml": xmlEscape,
+}
+
+func xmlEscape(s string) (string, error) {
+	var buf bytes.Buffer
+	if err := xml.EscapeText(&buf, []byte(s)); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
+}
+
 func generatePlist(cfg *ServiceConfig) ([]byte, error) {
-	tmpl, err := template.New("plist").Parse(plistTemplate)
+	tmpl, err := template.New("plist").Funcs(plistFuncs).Parse(plistTemplate)
 	if err != nil {
 		return nil, fmt.Errorf("parse plist template: %w", err)
 	}

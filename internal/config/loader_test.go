@@ -369,6 +369,36 @@ groups:
 			wantInErr: "labels[0] must not be empty",
 		},
 		{
+			name: "label with invalid character",
+			yaml: `
+groups:
+  - name: grp
+    max_runners: 1
+    labels:
+      - "bad label!"`,
+			wantInErr: "labels[0] \"bad label!\" must match",
+		},
+		{
+			name: "label too long",
+			yaml: `
+groups:
+  - name: grp
+    max_runners: 1
+    labels:
+      - "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"`,
+			wantInErr: "must match",
+		},
+		{
+			name: "label starting with hyphen",
+			yaml: `
+groups:
+  - name: grp
+    max_runners: 1
+    labels:
+      - "-leading"`,
+			wantInErr: "must match",
+		},
+		{
 			name: "invalid logging level",
 			yaml: `
 logging:
@@ -407,6 +437,36 @@ groups:
   - name: grp
     max_runners: 1`,
 			wantInErr: "health.runner_timeout must be >= 1m",
+		},
+		{
+			name: "workdir_base relative path",
+			yaml: `
+runner:
+  workdir_base: "relative/path"
+groups:
+  - name: grp
+    max_runners: 1`,
+			wantInErr: "runner.workdir_base must be absolute",
+		},
+		{
+			name: "workdir_base on /tmp",
+			yaml: `
+runner:
+  workdir_base: "/tmp"
+groups:
+  - name: grp
+    max_runners: 1`,
+			wantInErr: "must not be a top-level system directory",
+		},
+		{
+			name: "workdir_base too short",
+			yaml: `
+runner:
+  workdir_base: "/abc"
+groups:
+  - name: grp
+    max_runners: 1`,
+			wantInErr: "too short",
 		},
 		{
 			name: "shutdown_timeout too small",
