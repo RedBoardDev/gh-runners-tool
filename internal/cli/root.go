@@ -31,6 +31,7 @@ func newRootCmd() *cobra.Command {
 		newLoginCmd(),
 		newLogoutCmd(),
 		newAuthCmd(),
+		newDoctorCmd(),
 		newVersionCmd(),
 	)
 
