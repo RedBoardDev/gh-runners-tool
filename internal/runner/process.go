@@ -22,7 +22,7 @@ type Process struct {
 	Name      string
 	Group     string
 	WorkDir   string
-	PID       int
+	PID       int32
 	StartedAt time.Time
 	Cmd       *exec.Cmd
 }
@@ -66,18 +66,19 @@ func (m *ProcessManager) Start(ctx context.Context, instance *model.RunnerInstan
 		return nil, fmt.Errorf("start runner %s: %w", instance.Name, err)
 	}
 
+	pid := int32(cmd.Process.Pid)
 	pidFile := filepath.Join(workdir, ".ghr-pid")
-	if err := os.WriteFile(pidFile, []byte(strconv.Itoa(cmd.Process.Pid)), 0o644); err != nil {
+	if err := os.WriteFile(pidFile, []byte(strconv.FormatInt(int64(pid), 10)), 0o644); err != nil {
 		m.logger.WarnContext(ctx, "failed to write PID file", "path", pidFile, "error", err)
 	}
 
-	m.logger.InfoContext(ctx, "runner started", "runner", instance.Name, "pid", cmd.Process.Pid)
+	m.logger.InfoContext(ctx, "runner started", "runner", instance.Name, "pid", pid)
 
 	return &Process{
 		Name:      instance.Name,
 		Group:     instance.Group,
 		WorkDir:   workdir,
-		PID:       cmd.Process.Pid,
+		PID:       pid,
 		StartedAt: time.Now(),
 		Cmd:       cmd,
 	}, nil

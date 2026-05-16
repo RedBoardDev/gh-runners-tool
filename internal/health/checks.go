@@ -63,7 +63,7 @@ func (m *Monitor) checkRunnerLiveness(ctx context.Context, group string, snapsho
 		if snap.PID <= 0 {
 			continue
 		}
-		if err := syscall.Kill(snap.PID, 0); err != nil {
+		if err := syscall.Kill(int(snap.PID), 0); err != nil {
 			m.issues = append(m.issues, model.HealthIssue{
 				Level:      model.LevelError,
 				Type:       model.EventHealthZombieRunner,

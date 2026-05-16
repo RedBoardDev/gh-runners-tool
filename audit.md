@@ -698,10 +698,6 @@ Si Discord prend 2 s, le webhook attend 2 s. Pas critique car il n'y a souvent q
 
 `colorForLevel` (non lue ici mais évoquée) : à exposer en config si on veut customiser.
 
-### III.14 🟡 BASSE — `Process.PID int` should be `int32` for portability
-
-Mineur. macOS PID est int32. `int` suffit en Go 64-bit.
-
 ### III.15 🟡 BASSE — `internal/launchd/service.go:Status` substring match
 
 **Fichier** : `internal/launchd/service.go:77-102`.
