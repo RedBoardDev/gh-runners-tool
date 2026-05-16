@@ -138,39 +138,6 @@ Pour un daemon long-running c'est attendu (pas de re-prompt). Mais sur macOS, la
 
 **Recommandation moyen terme** : flag opt-in `--use-keychain` puis migration douce.
 
-### I.7 🔴 HAUTE — Injection XML possible dans le plist launchd
-
-**Fichier** : `internal/launchd/plist.go:8-41` (template `text/template`).
-
-```go
-plistTemplate = `...
-    <key>Label</key>
-    <string>{{.Label}}</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>{{.BinaryPath}}</string>
-        ...
-        <string>{{.ConfigPath}}</string>
-    </array>
-    ...
-```
-
-`text/template` n'échappe pas le XML. Si un opérateur passe un `--config "/tmp/x</string><key>RunAtLoad</key>..."` (peu réaliste, mais), ou si `BinaryPath`/`StateDir`/`LogDir` contient `<`, `>`, `&`, le plist devient un fichier XML structuré différemment, exécutant éventuellement d'autres commandes.
-
-**Recommandation** : registrer une fonction `xml` :
-
-```go
-funcs := template.FuncMap{"xml": func(s string) string {
-    var buf bytes.Buffer
-    _ = xml.EscapeText(&buf, []byte(s))
-    return buf.String()
-}}
-tmpl, _ := template.New("plist").Funcs(funcs).Parse(plistTemplate)
-// puis: <string>{{xml .Label}}</string>
-```
-
-Et valider en amont que les chemins ne contiennent que `[A-Za-z0-9_./-]`.
-
 ### I.8 🔴 HAUTE — `launchctl load/unload` est déprécié depuis macOS 10.10
 
 **Fichier** : `internal/launchd/launchctl.go:7-38`.
