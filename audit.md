@@ -567,21 +567,6 @@ Soit on supprime le champ, soit on le met à jour via une routine (groupe → co
 
 `os.RemoveAll(runnerDir)` + `if removeErr != nil { logger.WarnContext(...) }` apparaît 3 fois. Extraire dans une helper.
 
-### II.17 🟡 BASSE — `Discord.Send`: double `resp.Body.Close()`
-
-**Fichier** : `internal/notification/discord.go:64-66`.
-
-```go
-defer resp.Body.Close()
-if resp.StatusCode == http.StatusTooManyRequests {
-    ...
-    resp.Body.Close()   // ⚠️ already deferred
-    ...
-}
-```
-
-L'appel explicite + le defer = double close. `Close` est idempotent sur la majorité des cas, mais c'est du code mort/confusion.
-
 ### II.18 🟡 BASSE — `interactiveApp` accepte URL host vide
 
 **Fichier** : `internal/cli/login_wizard.go:69-72`.
