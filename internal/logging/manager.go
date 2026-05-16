@@ -138,6 +138,30 @@ func (m *LogManager) RunnerOutputFile(group, runner string) (io.WriteCloser, err
 	return w, nil
 }
 
+func (m *LogManager) RemoveRunnerLogs(group, runner string) error {
+	dir := filepath.Join(m.rootDir, "groups", group, "runners", runner)
+
+	m.mu.Lock()
+	kept := m.writers[:0]
+	for _, w := range m.writers {
+		if w.dir == dir {
+			if closeErr := w.Close(); closeErr != nil {
+				m.mu.Unlock()
+				return fmt.Errorf("logging: close runner writer %q/%q: %w", group, runner, closeErr)
+			}
+			continue
+		}
+		kept = append(kept, w)
+	}
+	m.writers = kept
+	m.mu.Unlock()
+
+	if err := os.RemoveAll(dir); err != nil {
+		return fmt.Errorf("logging: remove runner log dir %s: %w", dir, err)
+	}
+	return nil
+}
+
 func (m *LogManager) StartCleanupScheduler(ctx context.Context) error {
 	ticker := time.NewTicker(24 * time.Hour)
 	defer ticker.Stop()

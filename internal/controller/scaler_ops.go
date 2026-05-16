@@ -82,6 +82,13 @@ func (s *MacOSScaler) killRunner(ctx context.Context, runnerName string) error {
 		return fmt.Errorf("cleanup runner %q: %w", runnerName, cleanupErr)
 	}
 
+	if logsErr := s.logMgr.RemoveRunnerLogs(s.groupName, runnerName); logsErr != nil {
+		s.logger.WarnContext(ctx, "failed to remove runner log dir",
+			"runner", runnerName,
+			"error", logsErr,
+		)
+	}
+
 	s.logger.InfoContext(ctx, "killed runner", "runner", runnerName, "group", s.groupName)
 	return nil
 }
@@ -112,6 +119,12 @@ func (s *MacOSScaler) Shutdown(ctx context.Context) {
 			s.logger.WarnContext(ctx, "failed to cleanup runner during shutdown",
 				"runner", proc.Name,
 				"error", cleanupErr,
+			)
+		}
+		if logsErr := s.logMgr.RemoveRunnerLogs(s.groupName, proc.Name); logsErr != nil {
+			s.logger.WarnContext(ctx, "failed to remove runner log dir during shutdown",
+				"runner", proc.Name,
+				"error", logsErr,
 			)
 		}
 	}

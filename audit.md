@@ -638,12 +638,6 @@ L'exception est intentionnelle (status command preserves exit 0 on validation er
 
 `purge`, `restart`, `stop --force` ne supportent pas `--dry-run`. Pour un outil qui touche aux processus système et au scale set GitHub, c'est précieux.
 
-### III.9 🟠 MOYENNE — `Cleanup` ne nettoie pas les logs orphelins
-
-**Fichier** : `internal/runner/process.go:Cleanup:131-136`.
-
-Supprime le workdir mais pas le sous-dossier de logs `groups/<group>/runners/<name>/`. Au fil du temps des dizaines de dossiers vides s'accumulent (les fichiers `.json` sont rotatés par date, mais le dossier reste).
-
 ### III.11 🟠 MOYENNE — `notification/service.go:Notify` séquentiel sur les providers
 
 **Fichier** : `internal/notification/service.go:40-54`.
