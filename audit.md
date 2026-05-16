@@ -18,28 +18,30 @@
 - Configuration YAML + env propre, avec validation explicite et messages d'erreur agrégés (`errors.Join`).
 - Retry exponentiel sur le listener de groupe (`internal/controller/group.go:nextBackoff`).
 
-### Faiblesses majeures
+### État de l'audit
 
-1. **Path traversal exploitable** dans l'extraction tar du runner (`internal/runner/download.go:69-71`) — une archive malicieusement fabriquée peut créer un symlink hors du dossier de cache.
-2. **Aucune vérification d'intégrité** du binaire runner téléchargé (pas de SHA-256, pas de signature). Le code fait confiance aveugle au tarball GitHub.
-3. **`pgrep -f workdirBase`** (`internal/runner/cleanup.go:KillOrphanRunners`) peut tuer des processus utilisateur non-ghr si `workdir_base` est court ou trop large (ex. `/tmp`).
-4. **Métriques de santé jamais alimentées** : `UpdateGroupStats`, `RecordStartFailure`, `RecordStartSuccess` n'ont aucun call-site en production → `checkGroupDivergence` et `checkConsecutiveFailures` ne déclenchent jamais. Sécurité by-design désactivée silencieusement.
-5. **Notifications synchrones sous mutex** dans `internal/health/checks.go:runChecks` — un Discord lent bloque toute la boucle de health.
-6. **Race condition sur le cache** : 2 groupes lançant `EnsureBits` en parallèle pour la même version peuvent corrompre le cache. Détection « cached » basée sur `run.sh` qui apparaît avant la fin de l'extraction.
-7. **Unix socket sans permissions explicites** (`internal/api/server.go:Run`) — autres utilisateurs locaux peuvent lire le statut + PIDs.
-8. **Aucune commande de réelle observabilité** : pas de `/metrics`, pas d'audit log, pas de `ghr logs`.
+37 items ont été livrés dans la PR `audit-fixes` (I.1–I.10, I.13, II.2–II.8, II.11, II.13–II.17, III.6, III.9, III.10, III.14, IV.1, IV.2, IV.5, IV.7, IV.8, IV.9, IV.10, VII.6, IX.1) — voir l'historique git pour le détail commit-par-commit. Ce document ne liste plus que les findings encore ouverts.
 
-### Vue d'ensemble (heatmap)
+### Faiblesses majeures restantes
+
+1. **Métriques de santé jamais alimentées** (II.1) : `UpdateGroupStats`, `RecordStartFailure`, `RecordStartSuccess` n'ont aucun call-site en production → `checkGroupDivergence` et `checkConsecutiveFailures` ne déclenchent jamais.
+2. **Aucune commande de réelle observabilité** (VII.1, VII.4) : pas de `/metrics` Prometheus, pas de `ghr logs`.
+3. **Pas de tracing OpenTelemetry** ni **d'audit log** (VII.2, VII.3) pour les actions admin.
+4. **Pas de reload SIGHUP** (IV.4) : un changement de config impose un `ghr restart` complet.
+5. **Couverture de tests inégale** (V.1, V.2, V.3) : la couche CLI et le `controller/group.go` n'ont pas de couverture.
+6. **Webhook & UptimeKuma sans retry** (IV.3) : un 5xx transitoire = notification perdue.
+
+### Vue d'ensemble (heatmap, items restants)
 
 | Catégorie         | Critique | Haute | Moyenne | Basse |
 |-------------------|:--------:|:-----:|:-------:|:-----:|
-| Sécurité          |    3     |   6   |    7    |   5   |
-| Bugs / Correctness|    2     |   5   |    8    |   6   |
-| Architecture      |    0     |   2   |    9    |   7   |
-| Résilience        |    1     |   4   |    6    |   3   |
-| Tests             |    0     |   3   |    5    |   2   |
-| Observabilité     |    1     |   3   |    4    |   2   |
-| Doc               |    0     |   1   |    3    |   4   |
+| Sécurité          |    0     |   0   |    5    |   5   |
+| Bugs / Correctness|    1     |   0   |    3    |   3   |
+| Architecture      |    0     |   2   |    6    |   6   |
+| Résilience        |    0     |   2   |    1    |   2   |
+| Tests             |    0     |   3   |    4    |   3   |
+| Observabilité     |    1     |   3   |    2    |   2   |
+| Doc               |    0     |   0   |    3    |   3   |
 
 ---
 
@@ -98,10 +100,6 @@ Pour les **fine-grained PATs**, GitHub ne renvoie pas `X-OAuth-Scopes`. Le token
 **Fichier** : `internal/cli/daemon.go:writePIDFile:165-175`, `internal/cli/state.go:writeDaemonState:30-37`.
 
 PID et `config_path` sont des infos d'environnement modérément sensibles. `0o600` est suffisant et cohérent avec `credentials.json`.
-
-### I.17 🟡 BASSE — `installation.go:http.DefaultClient`
-
-Cf I.5. Déjà couvert.
 
 ### I.18 🟡 BASSE — `MaskedPAT` retourne `****` pour PAT court
 
@@ -364,13 +362,9 @@ L'opérateur ne sait pas que `KillOrphanRunners` peut tuer ses processus si work
 
 ## IV. Résilience / Robustesse
 
-Doubling sans jitter → thundering herd si N groupes se cassent en même temps (panne GitHub → tous retry au même tick).
-
-**Recommandation** : ajouter ±20 % de jitter (`rand.Float64()`).
-
 ### IV.11 🟡 BASSE — Pas de `--max-age` sur le cache
 
-Cf. IV.5.
+Doublon avec IV.5 (cache GC livré dans la PR `audit-fixes`) — surface plutôt un flag explicite si besoin d'override opérationnel.
 
 ### IV.12 🟡 BASSE — Aucune coordination multi-instance
 
@@ -614,11 +608,8 @@ goreleaser génère un changelog par release, mais pas dans le repo.
 | `ghr logs daemon\|group\|runner` | Ops UX | S |
 | `ghr inspect <runner>` | Debug | S |
 | `--dry-run` pour `purge`, `restart`, `stop --force` | Sécurité ops | XS |
-| `--max-age` sur cache binaries | Disk hygiene | XS |
 | Audit log file séparé | Compliance | S |
 | Notification level filter (`min_level: warn`) | UX notifs | XS |
-| SHA256 verification des tarballs runner | Sécu (I.2) | S |
-| Chmod 0o600 sur le socket | Sécu (I.4) | XS |
 
 ### X.2 Medium (1-2 semaines)
 
@@ -626,8 +617,7 @@ goreleaser génère un changelog par release, mais pas dans le repo.
 |---------|----------|--------|
 | Prometheus `/metrics` | Observabilité | M |
 | Reload via SIGHUP | Ops UX (IV.4) | M |
-| Keychain pour le PAT (macOS) | Sécu (I.6) | M |
-| Circuit breaker GitHub API | Résilience (IV.2) | S |
+| Keychain pour le PAT (macOS) | Sécu | M |
 | Drain mode (`ghr stop --drain`) | Ops UX | M |
 | TUI dashboard (`ghr top`) en Bubble Tea | UX | M |
 | Hardlinks au lieu de copy | Perf (VI.1) | S |
@@ -639,8 +629,6 @@ goreleaser génère un changelog par release, mais pas dans le repo.
 
 | Feature | Bénéfice | Effort |
 |---------|----------|--------|
-| Multi-runner-group ID resolution | Correctness (II.5) | M |
-| Migration de `launchctl load` vers `bootstrap` | macOS forward-compat | M |
 | GitHub Enterprise Server end-to-end | Adoption B2B | M |
 | Dockerfile + Helm chart (Linux runners) | Adoption cloud | L |
 | Web UI minimal (next.js) | Ops UX premium | L |
@@ -662,105 +650,45 @@ goreleaser génère un changelog par release, mais pas dans le repo.
 
 ---
 
-## XI. Plan d'action priorisé
+## XI. Plan d'action restant
 
-### Phase 1 — Sécurité bloquante (1 sprint, ~5 j)
+La première vague (Phase 1 + une partie de Phases 2/3/4) a été livrée dans la PR `audit-fixes` ; le reste se découpe ainsi :
 
-1. ✅ Fix tar symlink traversal (I.1) — 2 h.
-2. ✅ SHA-256 verification (I.2) — 4 h.
-3. ✅ `pgrep` safety guards (I.3) — 4 h (+ valider workdir_base).
-4. ✅ Chmod socket 0600 (I.4) — 30 min.
-5. ✅ HTTP client timeouts globaux (I.5) — 2 h.
-6. ✅ Plist XML escape (I.7) — 1 h.
-7. ✅ `gosec` dans CI (I.21) — 1 h.
+### Reste à faire — priorité haute
 
-### Phase 2 — Bugs correctness (1 sprint, ~5 j)
+- II.1 — Câbler `UpdateGroupStats` / `RecordStart{Failure,Success}` depuis le scaler.
+- V.1, V.3 — Couverture de tests sur `internal/cli/*` et `controller/group.go`.
+- IV.3 — Retry sur `internal/notification/webhook.go` et `internal/monitoring/uptimekuma.go`.
+- IV.4 — Reload de config via SIGHUP.
+- VII.1 — Endpoint `/metrics` Prometheus.
+- VII.2 — Tracing OpenTelemetry initial.
+- VII.3 — Audit log dédié pour les actions admin.
+- VII.4 — Commande `ghr logs`.
 
-8. ✅ Câbler `UpdateGroupStats`/`RecordStart{Failure,Success}` (II.1) — 1 j.
-9. ✅ Lock cache versionné + marker `.complete` (II.2) — 4 h.
-10. ✅ Loop variable explicite (II.4) — 30 min.
-11. ✅ `RunnerGroupID` config-driven (II.5) — 1 j.
-12. ✅ Notifications async sous lock (II.6) — 4 h.
-13. ✅ Graceful API shutdown (II.7, I.10, I.11) — 2 h.
-14. ✅ Process panic recovery (IV.1) — 2 h.
-15. ✅ Tests tar extraction (V.2) — 1 j.
+### Reste à faire — priorité moyenne / basse
 
-### Phase 3 — Résilience & observabilité (2 sprints, ~10 j)
-
-16. ✅ Circuit breaker + retry generalized (IV.2, IV.3) — 2 j.
-17. ✅ Reload SIGHUP (IV.4) — 2 j.
-18. ✅ Cache GC (IV.5) — 4 h.
-19. ✅ Liveness watchdog (IV.7) — 4 h.
-20. ✅ `/metrics` Prometheus (VII.1) — 1 j.
-21. ✅ Tracing OpenTelemetry initial (VII.2) — 2 j.
-22. ✅ Audit log (VII.3) — 1 j.
-23. ✅ `ghr logs` command (VII.4) — 1 j.
-
-### Phase 4 — Maintenabilité & tests (1 sprint, ~5 j)
-
-24. ✅ Split fichiers > 200 LOC (III.1) — 1 j.
-25. ✅ Centraliser `state.Paths` (III.10) — 4 h.
-26. ✅ Tests CLI (V.1) — 2 j.
-27. ✅ Coverage gate dans CI (V.9) — 4 h.
-28. ✅ `go mod tidy` (VIII.3) — 30 min.
-29. ✅ README sync (III.4) — 2 h.
-30. ✅ Regen specs (III.3) — 1 j.
-
-### Phase 5 — Features quick wins (1 sprint, ~5 j)
-
-Cf. table X.1.
-
-### Estimation totale
-
-| Phase | Durée | Risque |
-|-------|-------|--------|
-| 1     | 5 j   | bas    |
-| 2     | 5 j   | moyen  |
-| 3     | 10 j  | moyen  |
-| 4     | 5 j   | bas    |
-| 5     | 5 j   | bas    |
-| **Total** | **~6 semaines** | |
+Cf. les sections II, III, IV, V, VI, VII, VIII, IX restantes du document.
 
 ---
 
 ## XII. Annexes
 
-### A. Tableau récapitulatif des findings
+### A. Tableau récapitulatif des findings restants
 
 | ID    | Sévérité | Catégorie     | Titre                                                  | Fichier:Ligne                       |
 |-------|----------|---------------|--------------------------------------------------------|-------------------------------------|
-| I.1   | Critique | Sécurité      | Symlink traversal tar                                  | runner/download.go:68               |
-| I.2   | Critique | Sécurité      | Pas de checksum tarball                                | runner/download.go:17               |
-| I.3   | Critique | Sécurité      | `pgrep -f` non sanitized                               | runner/cleanup.go:91                |
 | II.1  | Critique | Bug           | Stats santé jamais alimentées                          | health/group_state.go               |
-| II.2  | Critique | Bug           | Race cache binaries                                    | runner/binary.go:28                 |
-| IV.1  | Critique | Résilience    | Pas de panic recovery                                  | cli/run.go:74                       |
 | VII.1 | Critique | Observabilité | Pas de `/metrics`                                      | —                                   |
-| I.4   | Haute    | Sécurité      | Unix socket lisible par tous                           | api/server.go:46                    |
-| I.5   | Haute    | Sécurité      | http.DefaultClient sans timeout                        | auth/installations.go               |
-| I.6   | Haute    | Sécurité      | Credentials clair                                      | auth/store.go:37                    |
-| I.7   | Haute    | Sécurité      | Plist XML non échappé                                  | launchd/plist.go:8                  |
-| I.8   | Haute    | Sécurité      | launchctl deprecated                                   | launchd/launchctl.go                |
-| I.9   | Haute    | Sécurité      | copyDir symlinks                                       | runner/copy.go:26                   |
-| II.3  | Haute    | Bug           | Validate erreurs verbeuses                             | auth/validate.go:46                 |
-| II.4  | Haute    | Bug           | Loop variable                                          | controller/controller.go:75         |
-| II.5  | Haute    | Bug           | RunnerGroupID hardcoded                                | cli/daemon.go:73                    |
-| II.6  | Haute    | Bug           | Notifs sous mutex                                      | health/checks.go:11                 |
-| II.7  | Haute    | Bug           | API shutdown abrupt                                    | api/server.go:62                    |
-| III.1 | Haute    | Archi         | Fichiers > 200 LOC                                     | health/checks.go (et 5 autres)      |
+| III.1 | Haute    | Archi         | Fichiers > 200 LOC                                     | health/checks.go (et autres)        |
 | III.2 | Haute    | Archi         | Interface scaleSetClient = 7 méthodes                  | controller/controller.go:16         |
-| IV.2  | Haute    | Résilience    | Pas de circuit breaker                                 | auth/*.go                           |
 | IV.3  | Haute    | Résilience    | Webhook/UK sans retry                                  | notification/webhook.go             |
 | IV.4  | Haute    | Résilience    | Pas de SIGHUP reload                                   | cli/run.go                          |
-| IV.5  | Haute    | Résilience    | Pas de cache GC                                        | runner/binary.go                    |
 | V.1   | Haute    | Tests         | Aucun test CLI                                         | cli/*.go                            |
-| V.2   | Haute    | Tests         | Aucun test tar extraction                              | runner/download.go                  |
 | V.3   | Haute    | Tests         | Aucun test controller/group                            | controller/group.go                 |
 | VII.2 | Haute    | Observabilité | Pas de tracing                                         | —                                   |
 | VII.3 | Haute    | Observabilité | Pas d'audit log                                        | —                                   |
 | VII.4 | Haute    | Observabilité | Pas de `ghr logs`                                      | cli/                                |
-| IX.1  | Haute    | Doc           | README divergent                                       | README.md                           |
-| ...   | ...      | ...           | (voir corps du doc)                                    | ...                                 |
+| ...   | ...      | ...           | (autres items moyenne/basse: voir corps du doc)        | ...                                 |
 
 ### B. Commandes utiles pour valider après corrections
 
