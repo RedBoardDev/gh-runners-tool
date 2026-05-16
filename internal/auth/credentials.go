@@ -1,6 +1,9 @@
 package auth
 
-import "time"
+import (
+	"log/slog"
+	"time"
+)
 
 type Credentials struct {
 	Method    string          `json:"method"`
@@ -30,4 +33,36 @@ type ValidationResult struct {
 
 type githubUserResponse struct {
 	Login string `json:"login"`
+}
+
+func (c *Credentials) LogValue() slog.Value {
+	if c == nil {
+		return slog.AnyValue(nil)
+	}
+	attrs := []slog.Attr{
+		slog.String("method", c.Method),
+		slog.String("github_url", c.GitHubURL),
+	}
+	if c.PAT != "" {
+		attrs = append(attrs, slog.String("pat", MaskedPAT(c.PAT)))
+	}
+	if c.GitHubApp != nil {
+		attrs = append(attrs, slog.Any("github_app", c.GitHubApp))
+	}
+	if !c.CreatedAt.IsZero() {
+		attrs = append(attrs, slog.Time("created_at", c.CreatedAt))
+	}
+	return slog.GroupValue(attrs...)
+}
+
+func (g *GitHubAppCreds) LogValue() slog.Value {
+	if g == nil {
+		return slog.AnyValue(nil)
+	}
+	return slog.GroupValue(
+		slog.String("client_id", g.ClientID),
+		slog.Int64("installation_id", g.InstallationID),
+		slog.String("private_key_path", g.PrivateKeyPath),
+		slog.String("account", g.Account),
+	)
 }

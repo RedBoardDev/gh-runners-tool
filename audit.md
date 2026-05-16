@@ -220,26 +220,6 @@ srv := &http.Server{
 
 **Recommandation** : à `loadFromFile`, faire `os.Stat` et warning (pas error) si `mode & 0o077 != 0`.
 
-### I.13 🟠 MOYENNE — `PAT` retourné en clair par `auth.Load`
-
-**Fichier** : `internal/auth/load.go:8-39`.
-
-`Load` retourne `*Credentials` brut. N'importe quel logger qui fait `slog.Info("loaded", "creds", creds)` ferait fuiter. Aucun call-site ne le fait actuellement (`internal/cli/run.go:82-88` log `creds.Method` seul, OK), mais c'est fragile.
-
-**Recommandation** : implémenter `String() string`, `MarshalJSON() / MarshalLog()` sur `Credentials` et `GitHubAppCreds` retournant des valeurs masquées :
-
-```go
-func (c *Credentials) LogValue() slog.Value {
-    return slog.GroupValue(
-        slog.String("method", c.Method),
-        slog.String("github_url", c.GitHubURL),
-        slog.String("pat", MaskedPAT(c.PAT)),
-    )
-}
-```
-
-Définir aussi un type alias `type Secret string` avec ces méthodes pour `PAT`.
-
 ### I.14 🟠 MOYENNE — Erreurs PAT contiennent le body HTTP brut
 
 **Fichier** : `internal/auth/validate.go:46-48`.
