@@ -536,12 +536,6 @@ L'opérateur peut changer `labels:` dans la config, faire `ghr restart`, et croi
 - Émettre un `model.Event{Type: EventConfigDrift, Level: LevelWarning, ...}` → notifié à Discord.
 - Soit auto-recreate (DELETE + CREATE), soit fail-fast au démarrage.
 
-### II.13 🟠 MOYENNE — `RunnerInstance.ID` & `Name` dupliqués
-
-**Fichier** : `internal/model/group.go`, utilisé dans `internal/controller/scaler_ops.go:24-29`.
-
-`Name = groupName-id`. Le `ID` seul n'est jamais utilisé en aval. Soit on l'enlève, soit on le surface dans le snapshot et l'API `/status`.
-
 ### II.18 🟡 BASSE — `interactiveApp` accepte URL host vide
 
 **Fichier** : `internal/cli/login_wizard.go:69-72`.

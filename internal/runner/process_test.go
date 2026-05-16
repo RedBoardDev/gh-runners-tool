@@ -25,7 +25,6 @@ func TestPrepare(t *testing.T) {
 
 	pm := NewProcessManager(workdirBase, silentLogger())
 	instance := model.RunnerInstance{
-		ID:    "abc123",
 		Name:  "test-group-abc123",
 		Group: "test-group",
 	}

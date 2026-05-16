@@ -11,7 +11,6 @@ type Group struct {
 }
 
 type RunnerInstance struct {
-	ID      string
 	Name    string
 	Group   string
 	WorkDir string

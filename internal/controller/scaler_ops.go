@@ -15,8 +15,7 @@ func (s *MacOSScaler) startRunner(ctx context.Context) error {
 	if _, err := rand.Read(randBytes); err != nil {
 		return fmt.Errorf("generate runner ID: %w", err)
 	}
-	id := hex.EncodeToString(randBytes)
-	name := fmt.Sprintf("%s-%s", s.groupName, id)
+	name := fmt.Sprintf("%s-%s", s.groupName, hex.EncodeToString(randBytes))
 
 	jitConfig, err := s.client.GenerateJITConfig(ctx, s.scaleSetID, name)
 	if err != nil {
@@ -24,7 +23,6 @@ func (s *MacOSScaler) startRunner(ctx context.Context) error {
 	}
 
 	instance := model.RunnerInstance{
-		ID:    id,
 		Name:  name,
 		Group: s.groupName,
 	}
