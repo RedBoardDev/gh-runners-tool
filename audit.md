@@ -206,14 +206,6 @@ Si l'extraction tar laisse un symlink absolu (cas non-couvert par I.1 si la vict
 
 **Recommandation** : refuser les symlinks absolus dans copyDir, ou les transformer en hardlinks pour les fichiers, ou faire un copy.Body au lieu d'un Symlink. Idéalement : exposer un mode `--strict` qui empêche les symlinks dans le cache (la plupart des runners GitHub n'en ont pas).
 
-### I.10 🟠 MOYENNE — `Run` du serveur API utilise `srv.Close()` au lieu de `Shutdown`
-
-**Fichier** : `internal/api/server.go:62-64`.
-
-`srv.Close()` ferme abruptement les connexions en cours. Pour 99 % du temps c'est OK (clients CLI courts), mais une requête `--watch` en cours sera coupée brutalement.
-
-**Recommandation** : `srv.Shutdown(ctx)` avec un sous-contexte timeout 5 s.
-
 ### I.11 🟠 MOYENNE — `http.Server` sans Read/Write/Idle timeouts
 
 **Fichier** : `internal/api/server.go:53-55`.
@@ -454,24 +446,6 @@ func (m *Monitor) runChecks(ctx context.Context) {
     // dispatch async
     go m.dispatchNotifications(ctx, pending)
 }
-```
-
-### II.7 🔴 HAUTE — `Server.Run` & `srv.Close()` race avec EAGAIN
-
-**Fichier** : `internal/api/server.go:52-79`.
-
-Si `<-ctx.Done()` arrive avant que `srv.Serve(ln)` n'ait commencé à accepter, `srv.Close()` ferme la listener mais `Serve` peut retourner `ErrServerClosed` *après* qu'on ait déjà retourné `nil`. Globalement OK, mais le pattern juste retourne dès la première branche du select. La goroutine `srv.Serve(ln)` peut continuer à écrire vers `errCh` pendant qu'on a déjà cleanup → potentiel use-after-free du listener.
-
-**Recommandation** : attendre la fin effective :
-
-```go
-case <-ctx.Done():
-    shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-    defer cancel()
-    err := srv.Shutdown(shutdownCtx)
-    <-errCh   // wait for Serve to return
-    _ = os.Remove(s.socketPath)
-    return err
 ```
 
 ### II.8 🟠 MOYENNE — `runChecks` reset les issues avant d'ajouter, mais sans atomicité externe
