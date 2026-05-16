@@ -8,6 +8,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/RedBoardDev/gh-runners-tool/v2/internal/logging"
 )
 
 type UptimeKumaConfig struct {
@@ -44,7 +46,7 @@ func (u *UptimeKuma) ReportDaemonHealth(ctx context.Context, groups, totalActual
 
 	pushErr := u.push(ctx, u.cfg.DaemonToken, "up", msg, ping)
 	if pushErr != nil {
-		u.logger.Warn("uptime-kuma daemon push failed", "error", pushErr)
+		u.logger.Warn("uptime-kuma daemon push failed", logging.KeyError, pushErr)
 	}
 }
 
@@ -62,7 +64,7 @@ func (u *UptimeKuma) ReportGroupHealth(ctx context.Context, group string, actual
 
 	pushErr := u.push(ctx, token, status, msg, ping)
 	if pushErr != nil {
-		u.logger.Warn("uptime-kuma group push failed", "group", group, "error", pushErr)
+		u.logger.Warn("uptime-kuma group push failed", logging.KeyGroup, group, logging.KeyError, pushErr)
 	}
 }
 

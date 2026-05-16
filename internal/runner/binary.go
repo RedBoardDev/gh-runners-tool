@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/RedBoardDev/gh-runners-tool/v2/internal/logging"
 )
 
 type BinaryManager struct {
@@ -40,7 +42,7 @@ func (m *BinaryManager) EnsureBits(ctx context.Context, version string) (string,
 			return "", fmt.Errorf("resolve latest runner version: %w", err)
 		}
 		resolved = v
-		m.logger.InfoContext(ctx, "resolved latest runner version", "version", resolved)
+		m.logger.InfoContext(ctx, "resolved latest runner version", logging.KeyVersion, resolved)
 	}
 
 	mu := m.lockFor(resolved)
@@ -51,18 +53,18 @@ func (m *BinaryManager) EnsureBits(ctx context.Context, version string) (string,
 	marker := filepath.Join(destDir, ".complete")
 
 	if _, err := os.Stat(marker); err == nil {
-		m.logger.DebugContext(ctx, "runner binary cached", "version", resolved, "path", destDir)
+		m.logger.DebugContext(ctx, "runner binary cached", logging.KeyVersion, resolved, logging.KeyPath, destDir)
 		return destDir, nil
 	}
 
 	if _, err := os.Stat(destDir); err == nil {
-		m.logger.WarnContext(ctx, "removing incomplete runner cache", "version", resolved, "path", destDir)
+		m.logger.WarnContext(ctx, "removing incomplete runner cache", logging.KeyVersion, resolved, logging.KeyPath, destDir)
 		if rmErr := os.RemoveAll(destDir); rmErr != nil {
 			return "", fmt.Errorf("clean stale cache %s: %w", destDir, rmErr)
 		}
 	}
 
-	m.logger.InfoContext(ctx, "downloading runner binary", "version", resolved)
+	m.logger.InfoContext(ctx, "downloading runner binary", logging.KeyVersion, resolved)
 
 	if err := os.MkdirAll(destDir, 0o755); err != nil {
 		return "", fmt.Errorf("create cache dir %s: %w", destDir, err)
@@ -70,22 +72,22 @@ func (m *BinaryManager) EnsureBits(ctx context.Context, version string) (string,
 
 	if err := downloadAndExtract(ctx, m.httpClient, resolved, destDir); err != nil {
 		if rmErr := os.RemoveAll(destDir); rmErr != nil {
-			m.logger.WarnContext(ctx, "failed to clean partial download", "path", destDir, "error", rmErr)
+			m.logger.WarnContext(ctx, "failed to clean partial download", logging.KeyPath, destDir, logging.KeyError, rmErr)
 		}
 		return "", fmt.Errorf("download runner %s: %w", resolved, err)
 	}
 
 	if err := os.WriteFile(marker, nil, 0o644); err != nil {
 		if rmErr := os.RemoveAll(destDir); rmErr != nil {
-			m.logger.WarnContext(ctx, "failed to clean cache after marker write", "path", destDir, "error", rmErr)
+			m.logger.WarnContext(ctx, "failed to clean cache after marker write", logging.KeyPath, destDir, logging.KeyError, rmErr)
 		}
 		return "", fmt.Errorf("write completion marker %s: %w", marker, err)
 	}
 
-	m.logger.InfoContext(ctx, "runner binary ready", "version", resolved, "path", destDir)
+	m.logger.InfoContext(ctx, "runner binary ready", logging.KeyVersion, resolved, logging.KeyPath, destDir)
 
 	if err := m.gcOldVersions(ctx, resolved); err != nil {
-		m.logger.WarnContext(ctx, "cache GC failed", "error", err)
+		m.logger.WarnContext(ctx, "cache GC failed", logging.KeyError, err)
 	}
 
 	return destDir, nil
@@ -128,10 +130,10 @@ func (m *BinaryManager) gcOldVersions(ctx context.Context, keep string) error {
 	for _, victim := range completed[cacheKeepVersions-1:] {
 		path := filepath.Join(m.cacheDir, victim.name)
 		if rmErr := os.RemoveAll(path); rmErr != nil {
-			m.logger.WarnContext(ctx, "failed to remove old runner cache", "path", path, "error", rmErr)
+			m.logger.WarnContext(ctx, "failed to remove old runner cache", logging.KeyPath, path, logging.KeyError, rmErr)
 			continue
 		}
-		m.logger.InfoContext(ctx, "removed old runner cache", "version", victim.name)
+		m.logger.InfoContext(ctx, "removed old runner cache", logging.KeyVersion, victim.name)
 	}
 	return nil
 }

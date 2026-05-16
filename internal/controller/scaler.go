@@ -80,8 +80,8 @@ func (s *MacOSScaler) HandleDesiredRunnerCount(ctx context.Context, count int) (
 	for i := 0; i < target-current; i++ {
 		if err := s.startRunner(ctx); err != nil {
 			s.logger.ErrorContext(ctx, "failed to start runner",
-				"group", s.groupName,
-				"error", err,
+				logging.KeyGroup, s.groupName,
+				logging.KeyError, err,
 			)
 		}
 	}
@@ -96,8 +96,8 @@ func (s *MacOSScaler) HandleJobStarted(ctx context.Context, jobInfo *scaleset.Jo
 	proc, ok := s.idle[jobInfo.RunnerName]
 	if !ok {
 		s.logger.WarnContext(ctx, "job started for unknown runner",
-			"runner", jobInfo.RunnerName,
-			"group", s.groupName,
+			logging.KeyRunner, jobInfo.RunnerName,
+			logging.KeyGroup, s.groupName,
 		)
 		return nil
 	}
@@ -106,8 +106,8 @@ func (s *MacOSScaler) HandleJobStarted(ctx context.Context, jobInfo *scaleset.Jo
 	s.busy[jobInfo.RunnerName] = proc
 
 	s.logger.InfoContext(ctx, "job started",
-		"runner", jobInfo.RunnerName,
-		"group", s.groupName,
+		logging.KeyRunner, jobInfo.RunnerName,
+		logging.KeyGroup, s.groupName,
 		"job", jobInfo.JobDisplayName,
 	)
 
@@ -137,27 +137,27 @@ func (s *MacOSScaler) HandleJobCompleted(ctx context.Context, jobInfo *scaleset.
 		stopErr := s.process.Stop(ctx, proc)
 		if stopErr != nil {
 			s.logger.WarnContext(ctx, "failed to stop runner",
-				"runner", jobInfo.RunnerName,
-				"error", stopErr,
+				logging.KeyRunner, jobInfo.RunnerName,
+				logging.KeyError, stopErr,
 			)
 		}
 		cleanupErr := s.process.Cleanup(proc)
 		if cleanupErr != nil {
 			s.logger.WarnContext(ctx, "failed to cleanup runner",
-				"runner", jobInfo.RunnerName,
-				"error", cleanupErr,
+				logging.KeyRunner, jobInfo.RunnerName,
+				logging.KeyError, cleanupErr,
 			)
 		}
 		if logsErr := s.logMgr.RemoveRunnerLogs(s.groupName, jobInfo.RunnerName); logsErr != nil {
 			s.logger.WarnContext(ctx, "failed to remove runner log dir",
-				"runner", jobInfo.RunnerName,
-				"error", logsErr,
+				logging.KeyRunner, jobInfo.RunnerName,
+				logging.KeyError, logsErr,
 			)
 		}
 	} else {
 		s.logger.WarnContext(ctx, "job completed for unknown runner",
-			"runner", jobInfo.RunnerName,
-			"group", s.groupName,
+			logging.KeyRunner, jobInfo.RunnerName,
+			logging.KeyGroup, s.groupName,
 		)
 	}
 
@@ -167,8 +167,8 @@ func (s *MacOSScaler) HandleJobCompleted(ctx context.Context, jobInfo *scaleset.
 	}
 
 	logArgs := []any{
-		"runner", jobInfo.RunnerName,
-		"group", s.groupName,
+		logging.KeyRunner, jobInfo.RunnerName,
+		logging.KeyGroup, s.groupName,
 		"result", jobInfo.Result,
 	}
 	if !jobInfo.FinishTime.IsZero() && !jobInfo.RunnerAssignTime.IsZero() {

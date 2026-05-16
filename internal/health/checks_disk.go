@@ -5,6 +5,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/RedBoardDev/gh-runners-tool/v2/internal/logging"
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/model"
 )
 
@@ -15,7 +16,7 @@ func (m *Monitor) checkDiskSpace() {
 
 	var stat syscall.Statfs_t
 	if err := syscall.Statfs("/", &stat); err != nil {
-		m.logger.Warn("failed to check disk space", "error", err)
+		m.logger.Warn("failed to check disk space", logging.KeyError, err)
 		return
 	}
 

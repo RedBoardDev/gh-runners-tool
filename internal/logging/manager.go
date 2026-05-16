@@ -87,7 +87,7 @@ func (m *LogManager) DaemonLogger() (*slog.Logger, error) {
 		return nil, fmt.Errorf("logging: daemon file handler: %w", err)
 	}
 	multi := NewMultiHandler(daemonFileH, m.consoleHandler())
-	return slog.New(multi).With("component", "daemon"), nil
+	return slog.New(multi).With(KeyComponent, ComponentDaemon), nil
 }
 
 func (m *LogManager) GroupLogger(group string) (*slog.Logger, error) {
@@ -103,7 +103,7 @@ func (m *LogManager) GroupLogger(group string) (*slog.Logger, error) {
 	}
 
 	multi := NewMultiHandler(groupFileH, daemonFileH, m.consoleHandler())
-	return slog.New(multi).With("component", "group", "group", group), nil
+	return slog.New(multi).With(KeyComponent, ComponentGroup, KeyGroup, group), nil
 }
 
 func (m *LogManager) RunnerLogger(group, runner string) (*slog.Logger, error) {
@@ -125,7 +125,7 @@ func (m *LogManager) RunnerLogger(group, runner string) (*slog.Logger, error) {
 	}
 
 	multi := NewMultiHandler(runnerFileH, groupFileH, daemonFileH, m.consoleHandler())
-	return slog.New(multi).With("component", "runner", "group", group, "runner", runner), nil
+	return slog.New(multi).With(KeyComponent, ComponentRunner, KeyGroup, group, KeyRunner, runner), nil
 }
 
 func (m *LogManager) RunnerOutputFile(group, runner string) (io.WriteCloser, error) {
