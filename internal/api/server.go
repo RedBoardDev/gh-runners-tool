@@ -51,6 +51,12 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 	s.listener = ln
 
+	if chmodErr := os.Chmod(s.socketPath, 0o600); chmodErr != nil {
+		ln.Close()
+		_ = os.Remove(s.socketPath)
+		return fmt.Errorf("chmod socket %s: %w", s.socketPath, chmodErr)
+	}
+
 	srv := &http.Server{
 		Handler: s.routes(),
 	}

@@ -106,28 +106,6 @@ Pire : la valeur par défaut pour un user non-root est `~/.local/share/ghr/runne
 2. Préférer parser `ps -eo pid,command` et matcher exactement le chemin complet du `run.sh` (ou utiliser le `.ghr-pid` déjà écrit + vérification du `comm`).
 3. Avant `Kill`, lire `/proc/PID/exe` (Linux) ou `proc_pidpath` (macOS via `lsof -p PID` ou `ps -p PID -o comm=`) et confirmer que la cible est bien `run.sh`/`Runner.Listener` dans un dossier sous `workdir_base`.
 
-### I.4 🔴 HAUTE — Unix socket sans permissions restreintes
-
-**Fichier** : `internal/api/server.go:46-50`.
-
-```go
-ln, err := net.Listen("unix", s.socketPath)
-```
-
-Le socket hérite de l'umask du processus (typiquement `0o022` → `0o755`). N'importe quel utilisateur local peut faire `GET /status` ou `GET /health` et lire les PIDs, noms de groupes, et issues de santé.
-
-**Recommandation** :
-```go
-ln, err := net.Listen("unix", s.socketPath)
-if err != nil { return ... }
-if err := os.Chmod(s.socketPath, 0o600); err != nil {
-    ln.Close()
-    return fmt.Errorf("chmod socket: %w", err)
-}
-```
-
-Ou mieux : créer le socket dans un dossier déjà `0o700` (`stateDir`) et permettre `0o660` pour permettre une intégration multi-utilisateur volontaire.
-
 ### I.6 🔴 HAUTE — Stockage des credentials en clair
 
 **Fichier** : `internal/auth/store.go:Save` écrit `~/.config/ghr/credentials.json` avec `0o600`, mais en clair.
