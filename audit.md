@@ -506,19 +506,6 @@ Ne vérifie que l'ouverture du fichier. Une clé corrompue passe ; l'opérateur 
 
 **Recommandation** : appeler `LoadPrivateKey(app.PrivateKeyPath)` qui fait déjà parse RSA + perms.
 
-### II.11 🟠 MOYENNE — `Process.Cmd` exporté
-
-**Fichier** : `internal/runner/process.go:Process:20-27`.
-
-```go
-type Process struct {
-    ...
-    Cmd *exec.Cmd
-}
-```
-
-`Cmd` exposé permet à du code externe de muter, mais aussi à `Stop` de devoir tester `nil` (`process.go:86-88`). Préférer encapsuler et exposer une méthode `Wait() error`.
-
 ### II.12 🟠 MOYENNE — `labelsChanged` détecte mais n'agit pas
 
 **Fichier** : `internal/controller/group.go:130-147`.

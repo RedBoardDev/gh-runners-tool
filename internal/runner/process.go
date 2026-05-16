@@ -24,7 +24,7 @@ type Process struct {
 	WorkDir   string
 	PID       int32
 	StartedAt time.Time
-	Cmd       *exec.Cmd
+	cmd       *exec.Cmd
 }
 
 type ProcessManager struct {
@@ -80,18 +80,18 @@ func (m *ProcessManager) Start(ctx context.Context, instance *model.RunnerInstan
 		WorkDir:   workdir,
 		PID:       pid,
 		StartedAt: time.Now(),
-		Cmd:       cmd,
+		cmd:       cmd,
 	}, nil
 }
 
 func (m *ProcessManager) Stop(ctx context.Context, proc *Process) error {
-	if proc.Cmd == nil || proc.Cmd.Process == nil {
+	if proc.cmd == nil || proc.cmd.Process == nil {
 		return nil
 	}
 
 	m.logger.InfoContext(ctx, "stopping runner", "runner", proc.Name, "pid", proc.PID)
 
-	if err := proc.Cmd.Process.Signal(syscall.SIGTERM); err != nil {
+	if err := proc.cmd.Process.Signal(syscall.SIGTERM); err != nil {
 		if isProcessFinished(err) {
 			return nil
 		}
@@ -100,7 +100,7 @@ func (m *ProcessManager) Stop(ctx context.Context, proc *Process) error {
 
 	done := make(chan error, 1)
 	go func() {
-		done <- proc.Cmd.Wait()
+		done <- proc.cmd.Wait()
 	}()
 
 	select {
@@ -111,7 +111,7 @@ func (m *ProcessManager) Stop(ctx context.Context, proc *Process) error {
 		return err
 	case <-time.After(stopGracePeriod):
 		m.logger.WarnContext(ctx, "runner did not exit after SIGTERM, sending SIGKILL", "runner", proc.Name, "pid", proc.PID)
-		if err := proc.Cmd.Process.Kill(); err != nil {
+		if err := proc.cmd.Process.Kill(); err != nil {
 			return fmt.Errorf("kill runner %s (pid %d): %w", proc.Name, proc.PID, err)
 		}
 		return <-done
