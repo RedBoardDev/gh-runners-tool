@@ -45,23 +45,6 @@
 
 ## I. Sécurité
 
-### I.3 ⛔ CRITIQUE — `pgrep -f workdirBase` peut tuer des processus arbitraires
-
-**Fichier** : `internal/runner/cleanup.go:91-104` (`KillOrphanRunners`).
-
-```go
-out, err := exec.CommandContext(ctx, "pgrep", "-f", m.workdirBase).Output()
-```
-
-`workdirBase` est lu de la config (`runner.workdir_base`). Si un opérateur configure `runner.workdir_base: "/tmp"` ou `"."` (chemin court ou commun), `pgrep -f` matchera tous les processus dont la commande contient ce substring → SIGKILL massif sur les processus utilisateur.
-
-Pire : la valeur par défaut pour un user non-root est `~/.local/share/ghr/runners` (`internal/config/loader.go:applyDefaults`). Si quelqu'un lance `ghr` à la racine du `$HOME` (`~`) ou pointe la config sur un dossier partagé, le risque est concret.
-
-**Recommandations** :
-1. Valider à `config.validate()` que `workdir_base` est absolu, n'est pas `/`, `/tmp`, `/var`, `$HOME`, et qu'il fait plus de N caractères.
-2. Préférer parser `ps -eo pid,command` et matcher exactement le chemin complet du `run.sh` (ou utiliser le `.ghr-pid` déjà écrit + vérification du `comm`).
-3. Avant `Kill`, lire `/proc/PID/exe` (Linux) ou `proc_pidpath` (macOS via `lsof -p PID` ou `ps -p PID -o comm=`) et confirmer que la cible est bien `run.sh`/`Runner.Listener` dans un dossier sous `workdir_base`.
-
 ### I.6 🔴 HAUTE — Stockage des credentials en clair
 
 **Fichier** : `internal/auth/store.go:Save` écrit `~/.config/ghr/credentials.json` avec `0o600`, mais en clair.

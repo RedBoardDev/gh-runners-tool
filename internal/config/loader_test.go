@@ -439,6 +439,36 @@ groups:
 			wantInErr: "health.runner_timeout must be >= 1m",
 		},
 		{
+			name: "workdir_base relative path",
+			yaml: `
+runner:
+  workdir_base: "relative/path"
+groups:
+  - name: grp
+    max_runners: 1`,
+			wantInErr: "runner.workdir_base must be absolute",
+		},
+		{
+			name: "workdir_base on /tmp",
+			yaml: `
+runner:
+  workdir_base: "/tmp"
+groups:
+  - name: grp
+    max_runners: 1`,
+			wantInErr: "must not be a top-level system directory",
+		},
+		{
+			name: "workdir_base too short",
+			yaml: `
+runner:
+  workdir_base: "/abc"
+groups:
+  - name: grp
+    max_runners: 1`,
+			wantInErr: "too short",
+		},
+		{
 			name: "shutdown_timeout too small",
 			yaml: `
 daemon:

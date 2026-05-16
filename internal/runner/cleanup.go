@@ -97,11 +97,28 @@ func (m *ProcessManager) KillOrphanRunners(ctx context.Context) {
 		if err != nil || pid <= 0 {
 			continue
 		}
+		if !m.processBelongsToGhr(ctx, pid) {
+			m.logger.DebugContext(ctx, "ignoring pgrep match not owned by ghr", "pid", pid)
+			continue
+		}
 		m.logger.WarnContext(ctx, "killing orphan runner process", "pid", pid)
 		if killErr := syscall.Kill(pid, syscall.SIGKILL); killErr != nil {
 			m.logger.WarnContext(ctx, "failed to kill orphan runner", "pid", pid, "error", killErr)
 		}
 	}
+}
+
+func (m *ProcessManager) processBelongsToGhr(ctx context.Context, pid int) bool {
+	out, err := exec.CommandContext(ctx, "ps", "-p", strconv.Itoa(pid), "-o", "command=").Output()
+	if err != nil {
+		return false
+	}
+	cmd := strings.TrimSpace(string(out))
+	if cmd == "" {
+		return false
+	}
+	prefix := strings.TrimRight(m.workdirBase, string(os.PathSeparator)) + string(os.PathSeparator)
+	return strings.Contains(cmd, prefix) && strings.Contains(cmd, "/run.sh")
 }
 
 func isProcessAlive(pid int) bool {
