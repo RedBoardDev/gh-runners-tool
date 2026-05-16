@@ -520,10 +520,6 @@ ghr logs --since 1h --grep "error"
 
 Pour debug, dump l'état d'un runner spécifique (PID, workdir, log path, started, jobs done).
 
-### VII.6 🟠 MOYENNE — Logs runner non tagués
-
-`RunnerOutputFile` écrit le stdout/stderr brut. Pas de wrapping JSON pour les corréler aux events du daemon. Cf. github actions runner émet déjà du log structuré sur sa propre stack, mais nous on les balance comme-is.
-
 ### VII.7 🟠 MOYENNE — Pas de rate-limit display
 
 `GET /user` retourne `X-RateLimit-Remaining` mais on ne le surfait pas.

@@ -135,7 +135,7 @@ func (m *LogManager) RunnerOutputFile(group, runner string) (io.WriteCloser, err
 		return nil, fmt.Errorf("logging: runner output file for %q/%q: %w", group, runner, err)
 	}
 	m.trackWriter(w)
-	return w, nil
+	return newTaggedWriter(w, group, runner, "runner"), nil
 }
 
 func (m *LogManager) RemoveRunnerLogs(group, runner string) error {
