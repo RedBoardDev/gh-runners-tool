@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/config"
+	"github.com/RedBoardDev/gh-runners-tool/v2/internal/state"
 	"github.com/spf13/cobra"
 )
 
@@ -45,7 +46,7 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 	}
 
 	stateDir := resolveStateDir()
-	socketPath := filepath.Join(stateDir, "ghr.sock")
+	socketPath := state.New(stateDir).Socket()
 
 	if !watch {
 		return renderOnce(socketPath, stateDir, jsonOutput)

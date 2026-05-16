@@ -644,24 +644,6 @@ L'exception est intentionnelle (status command preserves exit 0 on validation er
 
 Supprime le workdir mais pas le sous-dossier de logs `groups/<group>/runners/<name>/`. Au fil du temps des dizaines de dossiers vides s'accumulent (les fichiers `.json` sont rotatés par date, mais le dossier reste).
 
-### III.10 🟠 MOYENNE — `pidFilePath` et `socketPath` calculés différemment
-
-**Fichier** : `internal/cli/daemon.go:161-163`, `internal/api/server.go:35`.
-
-Deux conventions pour le même état (`stateDir`) : `daemon.pid`, `daemon.state.json`, `ghr.sock` listés en dur dans `cleanupStateFiles` (`purge.go:172-180`). Si on ajoute un fichier, il faut maintenir la liste.
-
-**Recommandation** : centraliser dans `internal/state/` :
-
-```go
-package state
-
-type Paths struct { Dir string }
-func (p Paths) PIDFile() string  { return filepath.Join(p.Dir, "daemon.pid") }
-func (p Paths) StateFile() string { return filepath.Join(p.Dir, "daemon.state.json") }
-func (p Paths) Socket() string   { return filepath.Join(p.Dir, "ghr.sock") }
-func (p Paths) All() []string    { return []string{p.PIDFile(), p.StateFile(), p.Socket()} }
-```
-
 ### III.11 🟠 MOYENNE — `notification/service.go:Notify` séquentiel sur les providers
 
 **Fichier** : `internal/notification/service.go:40-54`.

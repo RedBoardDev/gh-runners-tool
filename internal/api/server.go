@@ -8,10 +8,10 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"path/filepath"
 
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/health"
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/model"
+	"github.com/RedBoardDev/gh-runners-tool/v2/internal/state"
 )
 
 type controllerState interface {
@@ -32,7 +32,7 @@ type Server struct {
 
 func NewServer(stateDir string, controller controllerState, healthProvider healthState, logger *slog.Logger) *Server {
 	return &Server{
-		socketPath: filepath.Join(stateDir, "ghr.sock"),
+		socketPath: state.New(stateDir).Socket(),
 		controller: controller,
 		health:     healthProvider,
 		logger:     logger,

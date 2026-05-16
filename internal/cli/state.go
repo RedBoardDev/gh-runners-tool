@@ -4,11 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"time"
-)
 
-const stateFileName = "daemon.state.json"
+	"github.com/RedBoardDev/gh-runners-tool/v2/internal/state"
+)
 
 type daemonState struct {
 	ConfigPath string    `json:"config_path"`
@@ -17,23 +16,22 @@ type daemonState struct {
 }
 
 func writeDaemonState(stateDir, configPath string) error {
-	state := daemonState{
+	ds := daemonState{
 		ConfigPath: configPath,
 		StartedAt:  time.Now(),
 		PID:        os.Getpid(),
 	}
 
-	data, err := json.MarshalIndent(state, "", "  ")
+	data, err := json.MarshalIndent(ds, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal daemon state: %w", err)
 	}
 
-	dir := stateDir
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("create state directory %s: %w", dir, err)
+	if err := os.MkdirAll(stateDir, 0o755); err != nil {
+		return fmt.Errorf("create state directory %s: %w", stateDir, err)
 	}
 
-	path := filepath.Join(dir, stateFileName)
+	path := state.New(stateDir).StateFile()
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		return fmt.Errorf("write daemon state %s: %w", path, err)
 	}
@@ -41,20 +39,19 @@ func writeDaemonState(stateDir, configPath string) error {
 }
 
 func readDaemonState(stateDir string) (*daemonState, error) {
-	path := filepath.Join(stateDir, stateFileName)
+	path := state.New(stateDir).StateFile()
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read daemon state %s: %w", path, err)
 	}
 
-	var state daemonState
-	if err := json.Unmarshal(data, &state); err != nil {
+	var ds daemonState
+	if err := json.Unmarshal(data, &ds); err != nil {
 		return nil, fmt.Errorf("parse daemon state %s: %w", path, err)
 	}
-	return &state, nil
+	return &ds, nil
 }
 
 func removeDaemonState(stateDir string) {
-	path := filepath.Join(stateDir, stateFileName)
-	_ = os.Remove(path)
+	_ = os.Remove(state.New(stateDir).StateFile())
 }

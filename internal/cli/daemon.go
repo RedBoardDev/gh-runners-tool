@@ -18,6 +18,7 @@ import (
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/monitoring"
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/notification"
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/runner"
+	"github.com/RedBoardDev/gh-runners-tool/v2/internal/state"
 )
 
 type daemon struct {
@@ -160,7 +161,7 @@ func resolveGitHubURL(creds *auth.Credentials, cfg *config.Config) (string, erro
 }
 
 func pidFilePath(stateDir string) string {
-	return filepath.Join(stateDir, "daemon.pid")
+	return state.New(stateDir).PIDFile()
 }
 
 func writePIDFile(path string) error {
