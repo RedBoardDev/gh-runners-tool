@@ -171,21 +171,6 @@ type groupStatsReporter interface {
 
 Sans ce câblage, deux features documentées du produit (divergence detection et consecutive-failure alert) sont du **vaporware**.
 
-### II.5 🔴 HAUTE — `RunnerGroupID: 1` hardcoded
-
-**Fichier** : `internal/cli/daemon.go:73`.
-
-```go
-controller.ControllerConfig{
-    RunnerVersion: cfg.Runner.Version,
-    RunnerGroupID: 1,   // ⚠️ hardcoded
-},
-```
-
-`1` est l'ID du runner group `default` de GitHub, mais une org peut en avoir plusieurs et la config YAML (`cfg.GitHub.RunnerGroup`) référence un nom, pas un ID. La résolution nom → ID n'existe nulle part.
-
-**Recommandation** : appeler `GET /orgs/{org}/actions/runner-groups` au démarrage, matcher par nom, et stocker l'ID dans `controllerConfig`. À défaut, exposer `runner_group_id` en config YAML.
-
 ### II.6 🔴 HAUTE — Notifications & reporting synchrones sous lock
 
 **Fichier** : `internal/health/checks.go:runChecks:11-58`.

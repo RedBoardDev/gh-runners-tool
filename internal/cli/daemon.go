@@ -73,7 +73,7 @@ func buildDaemon(cfg *config.Config, creds *auth.Credentials, githubURL string) 
 		ghClient, binaryMgr, processMgr, notifSvc, logMgr,
 		cfg.Groups, controller.ControllerConfig{
 			RunnerVersion: cfg.Runner.Version,
-			RunnerGroupID: 1,
+			RunnerGroupID: cfg.GitHub.RunnerGroupID,
 		}, logger,
 	)
 

@@ -1,6 +1,7 @@
 github:
   url: "https://github.com/my-org"
   runner_group: "default"
+  runner_group_id: 1
 
 runner:
   version: "latest"

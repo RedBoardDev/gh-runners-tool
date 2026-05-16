@@ -70,6 +70,10 @@ func validate(cfg *Config) error {
 		}
 	}
 
+	if cfg.GitHub.RunnerGroupID < 1 {
+		errs = append(errs, fmt.Errorf("github.runner_group_id must be >= 1, got %d", cfg.GitHub.RunnerGroupID))
+	}
+
 	if cfg.Runner.WorkdirBase != "" {
 		clean := filepath.Clean(cfg.Runner.WorkdirBase)
 		switch {

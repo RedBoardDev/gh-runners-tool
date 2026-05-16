@@ -17,8 +17,9 @@ type Config struct {
 }
 
 type GitHubConfig struct {
-	URL         string `yaml:"url"`
-	RunnerGroup string `yaml:"runner_group"`
+	URL           string `yaml:"url"`
+	RunnerGroup   string `yaml:"runner_group"`
+	RunnerGroupID int    `yaml:"runner_group_id"`
 }
 
 type RunnerConfig struct {

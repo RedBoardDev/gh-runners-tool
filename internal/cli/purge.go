@@ -100,7 +100,7 @@ func purgeScaleSets(ctx context.Context, ghClient *github.Client, cfg *config.Co
 	deletedSets := 0
 	for _, g := range cfg.Groups {
 		fmt.Printf("purging scale set %q...\n", g.Name)
-		ss, getErr := ghClient.GetScaleSet(ctx, 1, g.Name)
+		ss, getErr := ghClient.GetScaleSet(ctx, cfg.GitHub.RunnerGroupID, g.Name)
 		if getErr != nil {
 			fmt.Printf("  scale set %q not found, skipping\n", g.Name)
 			continue

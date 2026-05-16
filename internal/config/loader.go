@@ -57,6 +57,9 @@ func applyDefaults(cfg *Config) {
 	if cfg.GitHub.RunnerGroup == "" {
 		cfg.GitHub.RunnerGroup = "default"
 	}
+	if cfg.GitHub.RunnerGroupID == 0 {
+		cfg.GitHub.RunnerGroupID = 1
+	}
 
 	if cfg.Runner.Version == "" {
 		cfg.Runner.Version = "latest"
