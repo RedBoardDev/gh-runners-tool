@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math/rand"
 	"os"
 	"time"
 
@@ -185,7 +186,9 @@ func deduplicateLabels(groupName string, extra []string) []string {
 func nextBackoff(current time.Duration) time.Duration {
 	next := current * 2
 	if next > backoffMax {
-		return backoffMax
+		next = backoffMax
 	}
-	return next
+	// ±20% jitter to spread retries across groups that all failed at the same tick.
+	jitter := time.Duration((rand.Float64()*0.4 - 0.2) * float64(next))
+	return next + jitter
 }
