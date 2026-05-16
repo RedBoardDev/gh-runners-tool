@@ -42,7 +42,7 @@ func decodeLines(t *testing.T, r io.Reader) []taggedLine {
 
 func TestTaggedWriter_EmitsOneJSONLinePerNewline(t *testing.T) {
 	buf := &closingBuffer{}
-	w := newTaggedWriter(buf, "g1", "r1", "runner")
+	w := newTaggedWriter(buf, "g1", "r1")
 
 	if _, err := w.Write([]byte("hello\nworld\n")); err != nil {
 		t.Fatalf("write: %v", err)
@@ -67,7 +67,7 @@ func TestTaggedWriter_EmitsOneJSONLinePerNewline(t *testing.T) {
 
 func TestTaggedWriter_BuffersPartialLines(t *testing.T) {
 	buf := &closingBuffer{}
-	w := newTaggedWriter(buf, "g", "r", "runner")
+	w := newTaggedWriter(buf, "g", "r")
 
 	if _, err := w.Write([]byte("partial ")); err != nil {
 		t.Fatalf("write: %v", err)
@@ -88,7 +88,7 @@ func TestTaggedWriter_BuffersPartialLines(t *testing.T) {
 
 func TestTaggedWriter_CloseFlushesTrailingPartial(t *testing.T) {
 	buf := &closingBuffer{}
-	w := newTaggedWriter(buf, "g", "r", "runner")
+	w := newTaggedWriter(buf, "g", "r")
 
 	if _, err := w.Write([]byte("orphan no newline")); err != nil {
 		t.Fatalf("write: %v", err)

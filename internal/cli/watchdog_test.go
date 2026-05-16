@@ -50,7 +50,10 @@ func TestProbeOK_ConnectionError(t *testing.T) {
 	client := &http.Client{Timeout: 50 * time.Millisecond}
 	// Hit an address that should not have anyone listening.
 	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://127.0.0.1:1/health", http.NoBody)
-	_, err := client.Do(req)
+	resp, err := client.Do(req)
+	if resp != nil {
+		resp.Body.Close()
+	}
 	if err == nil {
 		t.Skip("unexpected connectivity to port 1")
 	}

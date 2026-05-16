@@ -18,16 +18,14 @@ type taggedWriter struct {
 	buf    bytes.Buffer
 	group  string
 	runner string
-	source string
 	now    func() time.Time
 }
 
-func newTaggedWriter(inner io.WriteCloser, group, runner, source string) *taggedWriter {
+func newTaggedWriter(inner io.WriteCloser, group, runner string) *taggedWriter {
 	return &taggedWriter{
 		inner:  inner,
 		group:  group,
 		runner: runner,
-		source: source,
 		now:    time.Now,
 	}
 }
@@ -63,7 +61,7 @@ func (w *taggedWriter) Write(p []byte) (int, error) {
 func (w *taggedWriter) emit(line string) error {
 	rec := taggedLine{
 		Time:   w.now().UTC().Format(time.RFC3339Nano),
-		Source: w.source,
+		Source: "runner",
 		Group:  w.group,
 		Runner: w.runner,
 		Line:   line,
