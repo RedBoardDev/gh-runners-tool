@@ -101,15 +101,22 @@ golangci-lint run          # lint (if installed)
 
 ```
 ghr/
-├── cmd/ghr/main.go            # Entrypoint
+├── cmd/ghr/main.go             # Entrypoint
 ├── internal/
-│   ├── cli/                    # Cobra commands
-│   ├── auth/                   # Credentials management
-│   ├── config/                 # YAML + env config
-│   ├── runner/                 # Binary download & process lifecycle
-│   ├── github/                 # Scale set SDK adapter
-│   ├── model/                  # Shared data structs
-│   └── logging/                # Structured logging
+│   ├── cli/                    # Cobra commands (start/stop/run/status/purge/login/...)
+│   ├── auth/                   # Credentials, JWT signing, installation tokens, breaker
+│   ├── config/                 # YAML + env loading, validation, defaults
+│   ├── controller/             # Scale-set orchestration and per-group scaler
+│   ├── runner/                 # Binary download (with SHA-256 verify) and process lifecycle
+│   ├── github/                 # scaleset SDK adapter
+│   ├── health/                 # Health monitor and check functions
+│   ├── notification/           # Discord + webhook providers with filtering
+│   ├── monitoring/             # Uptime Kuma push reporter
+│   ├── api/                    # Unix-socket JSON API exposing status/health
+│   ├── launchd/                # macOS service install/uninstall via bootstrap/bootout
+│   ├── state/                  # Centralized daemon-state file paths (pid/sock/state)
+│   ├── model/                  # Shared data structs (no logic)
+│   └── logging/                # Structured logging, rotation, tagged runner output
 ├── go.mod
 └── go.sum
 ```

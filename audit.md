@@ -579,10 +579,6 @@ Optional, mais utile.
 
 ## IX. Documentation
 
-### IX.1 🔴 HAUTE — README divergent du code
-
-Cf. III.4.
-
 ### IX.2 🟠 MOYENNE — `CLAUDE.md` référence des specs absentes
 
 Cf. III.3.
