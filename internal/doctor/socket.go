@@ -40,7 +40,7 @@ func (c SocketCheck) Run(ctx context.Context) Result {
 			},
 		},
 	}
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "http://unix/health", nil)
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "http://unix/health", http.NoBody)
 	resp, err := client.Do(req)
 	if err != nil {
 		res.Status = StatusFail

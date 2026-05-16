@@ -47,7 +47,7 @@ func (c CacheCheck) Run(ctx context.Context) Result {
 
 func dirSize(ctx context.Context, root string) (int64, error) {
 	var total int64
-	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+	err := filepath.WalkDir(root, func(_ string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -59,7 +59,7 @@ func dirSize(ctx context.Context, root string) (int64, error) {
 		}
 		info, ierr := d.Info()
 		if ierr != nil {
-			return nil
+			return nil //nolint:nilerr // best-effort: skip files we can't stat
 		}
 		total += info.Size()
 		return nil

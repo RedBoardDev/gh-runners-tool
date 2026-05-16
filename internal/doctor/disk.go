@@ -17,7 +17,7 @@ func (c DiskCheck) Run(_ context.Context) Result {
 	res := Result{Name: c.Name()}
 
 	seen := map[string]bool{}
-	worst := Status(StatusOK)
+	worst := StatusOK
 	for _, p := range c.Paths {
 		if p == "" || seen[p] {
 			continue
@@ -32,7 +32,7 @@ func (c DiskCheck) Run(_ context.Context) Result {
 			}
 			continue
 		}
-		available := int64(stat.Bavail) * int64(stat.Bsize)
+		available := int64(stat.Bavail) * int64(stat.Bsize) //nolint:unconvert // Bsize is int32 on darwin, int64 on linux
 		res.Details = append(res.Details, fmt.Sprintf("%s: %s free", p, humanBytes(available)))
 		if c.MinFree > 0 && available < c.MinFree {
 			if worst < StatusFail {
@@ -56,6 +56,7 @@ func (c DiskCheck) Run(_ context.Context) Result {
 	case StatusFail:
 		res.Summary = fmt.Sprintf("free space below minimum (%s)", humanBytes(c.MinFree))
 		res.Hint = "free disk space or move state/cache dirs to a larger volume"
+	case StatusSkip:
 	}
 	return res
 }

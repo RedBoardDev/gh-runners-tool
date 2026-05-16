@@ -44,7 +44,7 @@ func (c GitHubAPICheck) Run(ctx context.Context) Result {
 	url := base + "/rate_limit"
 	res.Details = []string{url}
 
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	req.Header.Set("Authorization", "Bearer "+c.Token)
 	req.Header.Set("Accept", "application/vnd.github+json")
 
