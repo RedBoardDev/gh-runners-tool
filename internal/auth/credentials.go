@@ -14,6 +14,7 @@ type GitHubAppCreds struct {
 	ClientID       string `json:"client_id"`
 	InstallationID int64  `json:"installation_id"`
 	PrivateKeyPath string `json:"private_key_path"`
+	Account        string `json:"account,omitempty"`
 }
 
 type LoadOpts struct {
