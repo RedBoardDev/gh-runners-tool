@@ -45,16 +45,6 @@
 
 ## I. Sécurité
 
-### I.6 🔴 HAUTE — Stockage des credentials en clair
-
-**Fichier** : `internal/auth/store.go:Save` écrit `~/.config/ghr/credentials.json` avec `0o600`, mais en clair.
-
-Pour un daemon long-running c'est attendu (pas de re-prompt). Mais sur macOS, la **Keychain** est l'idiom. Stocker au moins le PAT dans la Keychain via `security add-generic-password` ou `github.com/keybase/go-keychain` réduit la surface : un dump disque ne suffit plus.
-
-**Recommandation court terme** : à la lecture (`loadFromFile`), vérifier les permissions et émettre un warning visible si elles ne sont pas `0o600` (le code le fait déjà pour la private key dans `internal/auth/jwt.go:LoadPrivateKey:34-36` mais pas pour le credentials file).
-
-**Recommandation moyen terme** : flag opt-in `--use-keychain` puis migration douce.
-
 ### I.8 🔴 HAUTE — `launchctl load/unload` est déprécié depuis macOS 10.10
 
 **Fichier** : `internal/launchd/launchctl.go:7-38`.
