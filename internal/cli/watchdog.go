@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	watchdogInterval        = 30 * time.Second
-	watchdogTimeout         = 5 * time.Second
+	watchdogInterval         = 30 * time.Second
+	watchdogTimeout          = 5 * time.Second
 	watchdogFailureThreshold = 3
 )
 
@@ -75,4 +75,3 @@ func probeOK(ctx context.Context, client *http.Client) bool {
 	defer resp.Body.Close()
 	return resp.StatusCode >= 200 && resp.StatusCode < 500
 }
-
