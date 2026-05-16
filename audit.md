@@ -368,22 +368,6 @@ Doubling sans jitter → thundering herd si N groupes se cassent en même temps 
 
 **Recommandation** : ajouter ±20 % de jitter (`rand.Float64()`).
 
-### IV.9 🟠 MOYENNE — `Stop` n'a pas de timeout après SIGKILL
-
-**Fichier** : `internal/runner/process.go:85-117`.
-
-```go
-case <-time.After(stopGracePeriod):
-    ...
-    if err := proc.Cmd.Process.Kill(); err != nil { ... }
-    return <-done   // ⚠️ peut bloquer si Wait jamais ne retourne
-}
-```
-
-`Wait` après `Kill` retourne généralement vite, mais en cas de zombie ou parent reparenté à launchd, peut bloquer.
-
-**Recommandation** : `select { case err := <-done: return err; case <-time.After(5*time.Second): return ErrStuckProcess }`.
-
 ### IV.10 🟠 MOYENNE — `Discord` rate-limit retry sans backoff sur 5xx
 
 Le code distingue 429 (avec retry) du reste (échec). Mais un 503 transitoire = échec immédiat.

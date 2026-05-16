@@ -18,6 +18,8 @@ import (
 
 const stopGracePeriod = 10 * time.Second
 
+const killTimeout = 5 * time.Second
+
 type Process struct {
 	Name      string
 	Group     string
@@ -114,7 +116,15 @@ func (m *ProcessManager) Stop(ctx context.Context, proc *Process) error {
 		if err := proc.cmd.Process.Kill(); err != nil {
 			return fmt.Errorf("kill runner %s (pid %d): %w", proc.Name, proc.PID, err)
 		}
-		return <-done
+		select {
+		case err := <-done:
+			if isExpectedExit(err) {
+				return nil
+			}
+			return err
+		case <-time.After(killTimeout):
+			return fmt.Errorf("runner %s (pid %d) did not exit after SIGKILL within %s", proc.Name, proc.PID, killTimeout)
+		}
 	}
 }
 
