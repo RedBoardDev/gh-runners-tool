@@ -4,13 +4,24 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
 )
 
+func shortSocketDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("/tmp", "ghr-")
+	if err != nil {
+		t.Fatalf("mkdirtemp: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
+}
+
 func TestSocketCheck_MissingSocket(t *testing.T) {
-	c := SocketCheck{Path: filepath.Join(t.TempDir(), "ghr.sock")}
+	c := SocketCheck{Path: filepath.Join(shortSocketDir(t), "ghr.sock")}
 	res := c.Run(context.Background())
 	if res.Status != StatusFail {
 		t.Errorf("status = %s, want FAIL", res.Status)
@@ -18,7 +29,7 @@ func TestSocketCheck_MissingSocket(t *testing.T) {
 }
 
 func TestSocketCheck_HealthyDaemon(t *testing.T) {
-	dir := t.TempDir()
+	dir := shortSocketDir(t)
 	sock := filepath.Join(dir, "ghr.sock")
 
 	ln, err := net.Listen("unix", sock)
@@ -42,7 +53,7 @@ func TestSocketCheck_HealthyDaemon(t *testing.T) {
 }
 
 func TestSocketCheck_DaemonReturns500(t *testing.T) {
-	dir := t.TempDir()
+	dir := shortSocketDir(t)
 	sock := filepath.Join(dir, "ghr.sock")
 	ln, err := net.Listen("unix", sock)
 	if err != nil {
