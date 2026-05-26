@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 const downloadURLTemplate = "https://github.com/actions/runner/releases/download/v%s/actions-runner-osx-%s-%s.tar.gz"
@@ -26,7 +27,11 @@ func downloadAndExtract(ctx context.Context, client *http.Client, logger *slog.L
 	if err != nil {
 		return fmt.Errorf("fetch checksum for %s: %w", url, err)
 	}
-	logger.DebugContext(ctx, "checksum fetched", "sha256", expected[:8]+"...")
+	if expected != "" {
+		logger.DebugContext(ctx, "checksum fetched", "sha256", expected[:8]+"...")
+	} else {
+		logger.WarnContext(ctx, "no checksum file available, skipping verification")
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
@@ -56,14 +61,19 @@ func downloadAndExtract(ctx context.Context, client *http.Client, logger *slog.L
 	}
 
 	logger.DebugContext(ctx, "verifying checksum")
-	got := hex.EncodeToString(hasher.Sum(nil))
-	if !strings.EqualFold(got, expected) {
-		return fmt.Errorf("checksum mismatch for %s: got %s, want %s", url, got, expected)
+	if expected != "" {
+		got := hex.EncodeToString(hasher.Sum(nil))
+		if !strings.EqualFold(got, expected) {
+			return fmt.Errorf("checksum mismatch for %s: got %s, want %s", url, got, expected)
+		}
 	}
 	return nil
 }
 
 func fetchExpectedSHA256(ctx context.Context, client *http.Client, url string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return "", fmt.Errorf("create checksum request: %w", err)
@@ -75,6 +85,9 @@ func fetchExpectedSHA256(ctx context.Context, client *http.Client, url string) (
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == http.StatusNotFound {
+		return "", nil
+	}
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("checksum URL returned HTTP %d for %s", resp.StatusCode, url)
 	}
