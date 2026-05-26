@@ -19,8 +19,8 @@ func TestCopyDir_RefusesAbsoluteSymlink(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for absolute symlink, got nil")
 	}
-	if !strings.Contains(err.Error(), "non-local") {
-		t.Errorf("error = %v, want substring 'non-local'", err)
+	if !strings.Contains(err.Error(), "absolute target") {
+		t.Errorf("error = %v, want substring 'absolute target'", err)
 	}
 }
 
@@ -36,8 +36,8 @@ func TestCopyDir_RefusesEscapeSymlink(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for escaping symlink, got nil")
 	}
-	if !strings.Contains(err.Error(), "non-local") {
-		t.Errorf("error = %v, want substring 'non-local'", err)
+	if !strings.Contains(err.Error(), "escapes source directory") {
+		t.Errorf("error = %v, want substring 'escapes source directory'", err)
 	}
 }
 

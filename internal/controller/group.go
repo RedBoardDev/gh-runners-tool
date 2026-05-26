@@ -15,8 +15,8 @@ import (
 )
 
 const (
-	backoffMin = 2 * time.Second
-	backoffMax = 30 * time.Second
+	backoffMinimum = 2 * time.Second
+	backoffMax     = 30 * time.Second
 )
 
 func (c *GroupController) runGroup(ctx context.Context, group *config.GroupConfig) error {
@@ -37,7 +37,7 @@ func (c *GroupController) runGroup(ctx context.Context, group *config.GroupConfi
 
 	labels := deduplicateLabels(group.Name, group.Labels)
 
-	backoff := backoffMin
+	backoff := backoffMinimum
 	for {
 		err := c.runGroupOnce(ctx, group, cachedDir, labels, groupLogger)
 		if err == nil || errors.Is(err, context.Canceled) {

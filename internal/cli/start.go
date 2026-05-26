@@ -3,11 +3,21 @@ package cli
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/config"
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/launchd"
 	"github.com/spf13/cobra"
+)
+
+var (
+	startExecutable       = os.Executable
+	startLaunchdInstall   = launchd.Install
+	startLaunchdUninstall = launchd.Uninstall
+	startLaunchdIsRunning = launchd.IsRunning
+	startLaunchdStatus    = launchd.Status
+	startWaitForPID       = waitForPID
 )
 
 func newStartCmd() *cobra.Command {
@@ -38,41 +48,53 @@ func runStart(cmd *cobra.Command, args []string) error {
 	}
 
 	label := launchd.DefaultLabel()
-	if launchd.IsRunning(label) {
-		pid, _ := launchd.Status(label)
+	if startLaunchdIsRunning(label) {
+		pid, _ := startLaunchdStatus(label)
 		fmt.Printf("ghr is already running (pid=%d)\n", pid)
 		return nil
 	}
 
-	binaryPath, err := os.Executable()
+	binaryPath, err := startExecutable()
 	if err != nil {
 		return fmt.Errorf("resolve binary path: %w", err)
+	}
+
+	cfgAbs, err := filepath.Abs(cfgFile)
+	if err != nil {
+		return fmt.Errorf("resolve config path: %w", err)
+	}
+
+	if err := startLaunchdUninstall(label); err != nil {
+		return fmt.Errorf("cleanup stale launchd service: %w", err)
 	}
 
 	svcCfg := launchd.ServiceConfig{
 		Label:      label,
 		BinaryPath: binaryPath,
-		ConfigPath: cfgFile,
+		ConfigPath: cfgAbs,
 		LogDir:     cfg.Logging.Dir,
 		StateDir:   cfg.Daemon.StateDir,
 	}
 
-	if err := launchd.Install(&svcCfg); err != nil {
+	if err := startLaunchdInstall(&svcCfg); err != nil {
 		return fmt.Errorf("install launchd service: %w", err)
 	}
 
-	pid := waitForPID(cfg.Daemon.StateDir, 5*time.Second)
+	startupTimeout := 15 * time.Second
+	pid := startWaitForPID(cfg.Daemon.StateDir, startupTimeout)
+	if pid == 0 {
+		if err := startLaunchdUninstall(label); err != nil {
+			return fmt.Errorf("daemon did not report a pid within %s; cleanup launchd service: %w", startupTimeout, err)
+		}
+		return fmt.Errorf("daemon did not report a pid within %s; check logs at %s", startupTimeout, filepath.Join(cfg.Logging.Dir, "daemon.err"))
+	}
 
 	serviceType := "LaunchAgent"
 	if os.Getuid() == 0 {
 		serviceType = "LaunchDaemon"
 	}
 
-	if pid > 0 {
-		fmt.Printf("ghr started (pid=%d)\n", pid)
-	} else {
-		fmt.Println("ghr started")
-	}
+	fmt.Printf("ghr started (pid=%d)\n", pid)
 	fmt.Printf("Service: %s (%s)\n", label, serviceType)
 	fmt.Printf("Config:  %s\n", cfgFile)
 	fmt.Printf("Groups:  %d", len(cfg.Groups))

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -65,8 +66,8 @@ func TestExtractTarGz_BlocksAbsoluteSymlink(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for absolute symlink, got nil")
 	}
-	if !strings.Contains(err.Error(), "not local") {
-		t.Errorf("error = %v, want substring 'not local'", err)
+	if !strings.Contains(err.Error(), "absolute target") {
+		t.Errorf("error = %v, want substring 'absolute target'", err)
 	}
 	if _, statErr := os.Lstat(filepath.Join(dest, "evil-link")); statErr == nil {
 		t.Error("symlink should not have been created")
@@ -83,8 +84,8 @@ func TestExtractTarGz_BlocksRelativeEscapeSymlink(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for escaping symlink, got nil")
 	}
-	if !strings.Contains(err.Error(), "not local") {
-		t.Errorf("error = %v, want substring 'not local'", err)
+	if !strings.Contains(err.Error(), "escapes destination directory") {
+		t.Errorf("error = %v, want substring 'escapes destination directory'", err)
 	}
 }
 
@@ -100,6 +101,29 @@ func TestExtractTarGz_BlocksPathTraversal(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "escapes destination") {
 		t.Errorf("error = %v, want substring 'escapes destination'", err)
+	}
+}
+
+func TestFetchRunnerReleaseChecksum(t *testing.T) {
+	const valid = "760899b29fd4e942076bcd1160a662bf83c15d9ce8a8cc466763aec7e582b21b"
+	const asset = "actions-runner-osx-arm64-2.334.0.tar.gz"
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(map[string]string{
+			"body": "## SHA-256 Checksums\n- " + asset + " " + valid + "\n",
+		}); err != nil {
+			t.Errorf("write response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	got, err := fetchRunnerReleaseChecksum(context.Background(), srv.Client(), srv.URL, asset)
+	if err != nil {
+		t.Fatalf("fetchRunnerReleaseChecksum() error = %v", err)
+	}
+	if got != valid {
+		t.Fatalf("checksum = %q, want %q", got, valid)
 	}
 }
 

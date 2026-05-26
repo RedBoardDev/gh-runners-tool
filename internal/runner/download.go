@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -18,20 +19,19 @@ import (
 )
 
 const downloadURLTemplate = "https://github.com/actions/runner/releases/download/v%s/actions-runner-osx-%s-%s.tar.gz"
+const releaseAPIURLTemplate = "https://api.github.com/repos/actions/runner/releases/tags/v%s"
 
 func downloadAndExtract(ctx context.Context, client *http.Client, logger *slog.Logger, version, destDir string) error {
+	assetName := fmt.Sprintf("actions-runner-osx-%s-%s.tar.gz", runnerArch(), version)
 	url := fmt.Sprintf(downloadURLTemplate, version, runnerArch(), version)
 
-	logger.DebugContext(ctx, "fetching runner checksum", "url", url+".sha256")
-	expected, err := fetchExpectedSHA256(ctx, client, url+".sha256")
+	checksumURL := fmt.Sprintf(releaseAPIURLTemplate, version)
+	logger.DebugContext(ctx, "fetching runner checksum", "url", checksumURL, "asset", assetName)
+	expected, err := fetchRunnerReleaseChecksum(ctx, client, checksumURL, assetName)
 	if err != nil {
 		return fmt.Errorf("fetch checksum for %s: %w", url, err)
 	}
-	if expected != "" {
-		logger.DebugContext(ctx, "checksum fetched", "sha256", expected[:8]+"...")
-	} else {
-		logger.WarnContext(ctx, "no checksum file available, skipping verification")
-	}
+	logger.DebugContext(ctx, "checksum fetched", "sha256", expected[:8]+"...")
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
@@ -75,10 +75,7 @@ func downloadAndExtract(ctx context.Context, client *http.Client, logger *slog.L
 	}
 
 	logger.DebugContext(ctx, "extracting runner archive")
-	if err := extractTarGz(tmp, destDir); err != nil {
-		return err
-	}
-	return nil
+	return extractTarGz(tmp, destDir)
 }
 
 func fetchExpectedSHA256(ctx context.Context, client *http.Client, url string) (string, error) {
@@ -97,7 +94,7 @@ func fetchExpectedSHA256(ctx context.Context, client *http.Client, url string) (
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return "", nil
+		return "", fmt.Errorf("checksum URL returned HTTP %d for %s", resp.StatusCode, url)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("checksum URL returned HTTP %d for %s", resp.StatusCode, url)
@@ -113,10 +110,68 @@ func fetchExpectedSHA256(ctx context.Context, client *http.Client, url string) (
 		return "", fmt.Errorf("checksum file %s is empty", url)
 	}
 	hash := strings.ToLower(fields[0])
-	if len(hash) != 64 {
+	if !isSHA256Digest(hash) {
 		return "", fmt.Errorf("checksum %q from %s is not a sha-256 digest", hash, url)
 	}
 	return hash, nil
+}
+
+func fetchRunnerReleaseChecksum(ctx context.Context, client *http.Client, url, assetName string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
+	if err != nil {
+		return "", fmt.Errorf("create release request: %w", err)
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("fetch release: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("release URL returned HTTP %d for %s", resp.StatusCode, url)
+	}
+
+	var release struct {
+		Body string `json:"body"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&release); err != nil {
+		return "", fmt.Errorf("decode release response: %w", err)
+	}
+
+	hash, err := checksumFromReleaseBody(release.Body, assetName)
+	if err != nil {
+		return "", fmt.Errorf("release checksum for %s: %w", assetName, err)
+	}
+	return hash, nil
+}
+
+func checksumFromReleaseBody(body, assetName string) (string, error) {
+	for _, line := range strings.Split(body, "\n") {
+		if !strings.Contains(line, assetName) {
+			continue
+		}
+		for _, field := range strings.Fields(line) {
+			candidate := strings.Trim(field, "-`|")
+			if isSHA256Digest(candidate) {
+				return strings.ToLower(candidate), nil
+			}
+		}
+		return "", fmt.Errorf("line for asset does not contain a sha-256 digest")
+	}
+	return "", fmt.Errorf("asset not found in release body")
+}
+
+func isSHA256Digest(s string) bool {
+	if len(s) != 64 {
+		return false
+	}
+	_, err := hex.DecodeString(s)
+	return err == nil
 }
 
 func extractTarGz(r io.Reader, destDir string) error {

@@ -20,7 +20,7 @@ func (m *Monitor) checkDiskSpace() {
 		return
 	}
 
-	available := int64(stat.Bavail) * int64(stat.Bsize) //nolint:unconvert // Bsize type varies by OS
+	available := int64(stat.Bavail) * int64(stat.Bsize)
 	if available < m.cfg.MinDiskSpace {
 		m.issues = append(m.issues, model.HealthIssue{
 			Level:      model.LevelWarning,

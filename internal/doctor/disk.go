@@ -32,7 +32,7 @@ func (c DiskCheck) Run(_ context.Context) Result {
 			}
 			continue
 		}
-		available := int64(stat.Bavail) * int64(stat.Bsize) //nolint:unconvert // Bsize is int32 on darwin, int64 on linux
+		available := int64(stat.Bavail) * int64(stat.Bsize)
 		res.Details = append(res.Details, fmt.Sprintf("%s: %s free", p, humanBytes(available)))
 		if c.MinFree > 0 && available < c.MinFree {
 			if worst < StatusFail {

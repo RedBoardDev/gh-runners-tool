@@ -1,6 +1,8 @@
 package launchd
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -52,5 +54,27 @@ func TestStatus_NotRunning(t *testing.T) {
 func TestIsRunning_NotRunning(t *testing.T) {
 	if IsRunning("com.ghr.test.nonexistent.label.12345") {
 		t.Error("IsRunning() = true for nonexistent label")
+	}
+}
+
+func TestEnsureServiceDirectoriesCreatesRuntimeDirs(t *testing.T) {
+	dir := t.TempDir()
+	cfg := ServiceConfig{
+		LogDir:   filepath.Join(dir, "logs"),
+		StateDir: filepath.Join(dir, "state"),
+	}
+
+	if err := ensureServiceDirectories(&cfg); err != nil {
+		t.Fatalf("ensureServiceDirectories() error = %v", err)
+	}
+
+	for _, path := range []string{cfg.LogDir, cfg.StateDir} {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("stat %s: %v", path, err)
+		}
+		if !info.IsDir() {
+			t.Fatalf("%s is not a directory", path)
+		}
 	}
 }

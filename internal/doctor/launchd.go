@@ -22,7 +22,7 @@ func (c LaunchdCheck) Run(_ context.Context) Result {
 		if os.IsNotExist(err) {
 			res.Status = StatusWarn
 			res.Summary = "service not installed"
-			res.Hint = "run 'ghr start --install' to register the launchd service"
+			res.Hint = "run 'ghr start' to register the launchd service"
 			return res
 		}
 		res.Status = StatusFail

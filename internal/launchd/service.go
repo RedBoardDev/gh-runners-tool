@@ -31,6 +31,10 @@ func PlistPath(label string) string {
 }
 
 func Install(cfg *ServiceConfig) error {
+	if err := ensureServiceDirectories(cfg); err != nil {
+		return err
+	}
+
 	data, err := generatePlist(cfg)
 	if err != nil {
 		return fmt.Errorf("generate plist: %w", err)
@@ -52,6 +56,24 @@ func Install(cfg *ServiceConfig) error {
 
 	if err := launchctlKickstart(cfg.Label); err != nil {
 		return fmt.Errorf("launchctl kickstart: %w", err)
+	}
+
+	return nil
+}
+
+func ensureServiceDirectories(cfg *ServiceConfig) error {
+	dirs := []struct {
+		name string
+		path string
+	}{
+		{"log directory", cfg.LogDir},
+		{"state directory", cfg.StateDir},
+	}
+
+	for _, dir := range dirs {
+		if err := os.MkdirAll(dir.path, 0o755); err != nil {
+			return fmt.Errorf("create %s %s: %w", dir.name, dir.path, err)
+		}
 	}
 
 	return nil
