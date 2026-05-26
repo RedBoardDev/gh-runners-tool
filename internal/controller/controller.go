@@ -105,7 +105,7 @@ func (c *GroupController) Shutdown(ctx context.Context) {
 	c.mu.Unlock()
 
 	for name, s := range scalers {
-		c.logger.InfoContext(ctx, "shutting down scaler", "group", name)
+		c.logger.InfoContext(ctx, "shutting down scaler", logging.KeyGroup, name)
 		s.Shutdown(ctx)
 	}
 }

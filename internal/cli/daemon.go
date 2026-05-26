@@ -49,7 +49,7 @@ func buildDaemon(cfg *config.Config, creds *auth.Credentials, githubURL string) 
 	}
 
 	if err := logMgr.CleanupOldLogs(); err != nil {
-		logger.Warn("log cleanup failed", "error", err)
+		logger.Warn("log cleanup failed", logging.KeyError, err)
 	}
 
 	ghClient, err := github.NewClient(creds, githubURL)
@@ -62,7 +62,7 @@ func buildDaemon(cfg *config.Config, creds *auth.Credentials, githubURL string) 
 	processMgr := runner.NewProcessManager(cfg.Runner.WorkdirBase, logger)
 
 	if err := processMgr.CleanupStale(context.Background()); err != nil {
-		logger.Warn("stale runner cleanup failed", "error", err)
+		logger.Warn("stale runner cleanup failed", logging.KeyError, err)
 	}
 	processMgr.KillOrphanRunners(context.Background())
 

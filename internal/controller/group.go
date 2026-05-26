@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/config"
+	"github.com/RedBoardDev/gh-runners-tool/v2/internal/logging"
 	"github.com/actions/scaleset"
 )
 
@@ -44,8 +45,8 @@ func (c *GroupController) runGroup(ctx context.Context, group *config.GroupConfi
 		}
 
 		groupLogger.ErrorContext(ctx, "group listener failed, retrying",
-			"group", group.Name,
-			"error", err,
+			logging.KeyGroup, group.Name,
+			logging.KeyError, err,
 			"backoff", backoff,
 		)
 
@@ -84,8 +85,8 @@ func (c *GroupController) runGroupOnce(
 		closeCtx := context.WithoutCancel(ctx)
 		if closeErr := session.Close(closeCtx); closeErr != nil {
 			groupLogger.DebugContext(ctx, "session close",
-				"group", group.Name,
-				"error", closeErr,
+				logging.KeyGroup, group.Name,
+				logging.KeyError, closeErr,
 			)
 		}
 	}()
@@ -104,7 +105,7 @@ func (c *GroupController) runGroupOnce(
 	}
 
 	groupLogger.InfoContext(ctx, "group listener started",
-		"group", group.Name,
+		logging.KeyGroup, group.Name,
 		"scale_set_id", ss.ID,
 	)
 
@@ -118,9 +119,9 @@ func (c *GroupController) runGroupOnce(
 		deleteErr := c.client.DeleteScaleSet(cleanupCtx, ss.ID)
 		if deleteErr != nil {
 			groupLogger.WarnContext(ctx, "failed to delete scale set on shutdown",
-				"group", group.Name,
+				logging.KeyGroup, group.Name,
 				"scale_set_id", ss.ID,
-				"error", deleteErr,
+				logging.KeyError, deleteErr,
 			)
 		}
 		return context.Canceled
@@ -134,7 +135,7 @@ func (c *GroupController) resolveScaleSet(ctx context.Context, name string, labe
 	if err == nil && ss != nil {
 		if labelsChanged(ss.Labels, labels) {
 			c.logger.WarnContext(ctx, "scale set label mismatch detected, delete and recreate to update",
-				"group", name,
+				logging.KeyGroup, name,
 				"scale_set_id", ss.ID,
 			)
 		}

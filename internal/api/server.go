@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/health"
+	"github.com/RedBoardDev/gh-runners-tool/v2/internal/logging"
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/model"
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/state"
 )
@@ -68,7 +69,7 @@ func (s *Server) Run(ctx context.Context) error {
 
 	defer func() {
 		if cleanupErr := os.Remove(s.socketPath); cleanupErr != nil && !os.IsNotExist(cleanupErr) {
-			s.logger.Warn("failed to remove socket file", "path", s.socketPath, "error", cleanupErr)
+			s.logger.Warn("failed to remove socket file", logging.KeyPath, s.socketPath, logging.KeyError, cleanupErr)
 		}
 	}()
 

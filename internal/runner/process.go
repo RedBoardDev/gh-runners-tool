@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/RedBoardDev/gh-runners-tool/v2/internal/logging"
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/model"
 )
 
@@ -52,7 +53,7 @@ func (m *ProcessManager) Prepare(ctx context.Context, instance *model.RunnerInst
 		return "", fmt.Errorf("copy runner bits to %s: %w", workdir, err)
 	}
 
-	m.logger.DebugContext(ctx, "prepared runner workdir", "workdir", workdir, "runner", instance.Name)
+	m.logger.DebugContext(ctx, "prepared runner workdir", "workdir", workdir, logging.KeyRunner, instance.Name)
 	return workdir, nil
 }
 
@@ -71,10 +72,10 @@ func (m *ProcessManager) Start(ctx context.Context, instance *model.RunnerInstan
 	pid := int32(cmd.Process.Pid)
 	pidFile := filepath.Join(workdir, ".ghr-pid")
 	if err := os.WriteFile(pidFile, []byte(strconv.FormatInt(int64(pid), 10)), 0o644); err != nil {
-		m.logger.WarnContext(ctx, "failed to write PID file", "path", pidFile, "error", err)
+		m.logger.WarnContext(ctx, "failed to write PID file", logging.KeyPath, pidFile, logging.KeyError, err)
 	}
 
-	m.logger.InfoContext(ctx, "runner started", "runner", instance.Name, "pid", pid)
+	m.logger.InfoContext(ctx, "runner started", logging.KeyRunner, instance.Name, logging.KeyPID, pid)
 
 	return &Process{
 		Name:      instance.Name,
@@ -91,7 +92,7 @@ func (m *ProcessManager) Stop(ctx context.Context, proc *Process) error {
 		return nil
 	}
 
-	m.logger.InfoContext(ctx, "stopping runner", "runner", proc.Name, "pid", proc.PID)
+	m.logger.InfoContext(ctx, "stopping runner", logging.KeyRunner, proc.Name, logging.KeyPID, proc.PID)
 
 	if err := proc.cmd.Process.Signal(syscall.SIGTERM); err != nil {
 		if isProcessFinished(err) {
@@ -112,7 +113,7 @@ func (m *ProcessManager) Stop(ctx context.Context, proc *Process) error {
 		}
 		return err
 	case <-time.After(stopGracePeriod):
-		m.logger.WarnContext(ctx, "runner did not exit after SIGTERM, sending SIGKILL", "runner", proc.Name, "pid", proc.PID)
+		m.logger.WarnContext(ctx, "runner did not exit after SIGTERM, sending SIGKILL", logging.KeyRunner, proc.Name, logging.KeyPID, proc.PID)
 		if err := proc.cmd.Process.Kill(); err != nil {
 			return fmt.Errorf("kill runner %s (pid %d): %w", proc.Name, proc.PID, err)
 		}

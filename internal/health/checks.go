@@ -6,6 +6,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/RedBoardDev/gh-runners-tool/v2/internal/logging"
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/model"
 )
 
@@ -105,7 +106,7 @@ func (m *Monitor) checkRunnerLiveness(ctx context.Context, group string, snapsho
 			})
 			if m.killer != nil {
 				if killErr := m.killer.KillRunner(ctx, group, snap.Name); killErr != nil {
-					m.logger.ErrorContext(ctx, "failed to kill zombie runner", "group", group, "runner", snap.Name, "error", killErr)
+					m.logger.ErrorContext(ctx, "failed to kill zombie runner", logging.KeyGroup, group, logging.KeyRunner, snap.Name, logging.KeyError, killErr)
 				}
 			}
 		}
@@ -138,7 +139,7 @@ func (m *Monitor) checkRunnerTimeouts(ctx context.Context, group string, snapsho
 		})
 		if m.killer != nil {
 			if killErr := m.killer.KillRunner(ctx, group, snap.Name); killErr != nil {
-				m.logger.ErrorContext(ctx, "failed to kill timed-out runner", "group", group, "runner", snap.Name, "error", killErr)
+				m.logger.ErrorContext(ctx, "failed to kill timed-out runner", logging.KeyGroup, group, logging.KeyRunner, snap.Name, logging.KeyError, killErr)
 			}
 		}
 	}
@@ -187,7 +188,7 @@ func (m *Monitor) checkIdleTimeouts(ctx context.Context, group string, snapshots
 		})
 		if m.killer != nil {
 			if killErr := m.killer.KillRunner(ctx, group, snap.Name); killErr != nil {
-				m.logger.ErrorContext(ctx, "failed to kill idle runner", "group", group, "runner", snap.Name, "error", killErr)
+				m.logger.ErrorContext(ctx, "failed to kill idle runner", logging.KeyGroup, group, logging.KeyRunner, snap.Name, logging.KeyError, killErr)
 			}
 		}
 		killable--
