@@ -68,7 +68,7 @@ func (m *BinaryManager) EnsureBits(ctx context.Context, version string) (string,
 		return "", fmt.Errorf("create cache dir %s: %w", destDir, err)
 	}
 
-	if err := downloadAndExtract(ctx, m.httpClient, resolved, destDir); err != nil {
+	if err := downloadAndExtract(ctx, m.httpClient, m.logger, resolved, destDir); err != nil {
 		if rmErr := os.RemoveAll(destDir); rmErr != nil {
 			m.logger.WarnContext(ctx, "failed to clean partial download", "path", destDir, "error", rmErr)
 		}

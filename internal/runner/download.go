@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -17,19 +18,22 @@ import (
 
 const downloadURLTemplate = "https://github.com/actions/runner/releases/download/v%s/actions-runner-osx-%s-%s.tar.gz"
 
-func downloadAndExtract(ctx context.Context, client *http.Client, version, destDir string) error {
+func downloadAndExtract(ctx context.Context, client *http.Client, logger *slog.Logger, version, destDir string) error {
 	url := fmt.Sprintf(downloadURLTemplate, version, runnerArch(), version)
 
+	logger.DebugContext(ctx, "fetching runner checksum", "url", url+".sha256")
 	expected, err := fetchExpectedSHA256(ctx, client, url+".sha256")
 	if err != nil {
 		return fmt.Errorf("fetch checksum for %s: %w", url, err)
 	}
+	logger.DebugContext(ctx, "checksum fetched", "sha256", expected[:8]+"...")
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return fmt.Errorf("create download request: %w", err)
 	}
 
+	logger.DebugContext(ctx, "starting tarball download", "url", url)
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("download tarball: %w", err)
@@ -40,6 +44,7 @@ func downloadAndExtract(ctx context.Context, client *http.Client, version, destD
 		return fmt.Errorf("download returned HTTP %d for %s", resp.StatusCode, url)
 	}
 
+	logger.DebugContext(ctx, "extracting runner archive", "content_length", resp.ContentLength)
 	hasher := sha256.New()
 	tee := io.TeeReader(resp.Body, hasher)
 
@@ -50,6 +55,7 @@ func downloadAndExtract(ctx context.Context, client *http.Client, version, destD
 		return fmt.Errorf("drain tarball: %w", err)
 	}
 
+	logger.DebugContext(ctx, "verifying checksum")
 	got := hex.EncodeToString(hasher.Sum(nil))
 	if !strings.EqualFold(got, expected) {
 		return fmt.Errorf("checksum mismatch for %s: got %s, want %s", url, got, expected)
