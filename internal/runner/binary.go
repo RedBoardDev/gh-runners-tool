@@ -64,7 +64,7 @@ func (m *BinaryManager) EnsureBits(ctx context.Context, version string) (string,
 		}
 	}
 
-	m.logger.InfoContext(ctx, "downloading runner binary", logging.KeyVersion, resolved)
+	m.logger.InfoContext(ctx, "downloading runner binary", logging.KeyVersion, resolved, logging.KeyPath, destDir)
 
 	if err := os.MkdirAll(destDir, 0o755); err != nil {
 		return "", fmt.Errorf("create cache dir %s: %w", destDir, err)
