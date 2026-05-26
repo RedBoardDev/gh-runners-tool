@@ -70,6 +70,9 @@ func New(
 }
 
 func (c *GroupController) Run(ctx context.Context) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	var wg sync.WaitGroup
 	errCh := make(chan error, len(c.groups))
 
@@ -80,6 +83,7 @@ func (c *GroupController) Run(ctx context.Context) error {
 			defer wg.Done()
 			if err := c.runGroup(ctx, group); err != nil {
 				errCh <- err
+				cancel()
 			}
 		}()
 	}

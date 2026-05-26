@@ -151,7 +151,7 @@ func extractTarGz(r io.Reader, destDir string) error {
 				return err
 			}
 		case tar.TypeSymlink:
-			if err := writeSymlink(target, header.Name, header.Linkname); err != nil {
+			if err := writeSymlink(destDir, target, header.Name, header.Linkname); err != nil {
 				return err
 			}
 		}
@@ -187,9 +187,14 @@ func sanitizeTarPath(destDir, name string) (string, error) {
 	return target, nil
 }
 
-func writeSymlink(target, name, linkname string) error {
-	if filepath.IsAbs(linkname) || !filepath.IsLocal(linkname) {
-		return fmt.Errorf("tar symlink %q -> %q is not local", name, linkname)
+func writeSymlink(destDir, target, name, linkname string) error {
+	if filepath.IsAbs(linkname) {
+		return fmt.Errorf("tar symlink %q -> %q has absolute target", name, linkname)
+	}
+	resolved := filepath.Clean(filepath.Join(filepath.Dir(target), linkname))
+	cleanDest := filepath.Clean(destDir)
+	if resolved != cleanDest && !strings.HasPrefix(resolved, cleanDest+string(os.PathSeparator)) {
+		return fmt.Errorf("tar symlink %q -> %q escapes destination directory", name, linkname)
 	}
 	if err := os.Symlink(linkname, target); err != nil {
 		return fmt.Errorf("create symlink %s: %w", target, err)

@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 func copyDir(src, dst string) error {
@@ -29,8 +30,13 @@ func copyDir(src, dst string) error {
 			if err != nil {
 				return fmt.Errorf("read symlink %s: %w", path, err)
 			}
-			if filepath.IsAbs(link) || !filepath.IsLocal(link) {
-				return fmt.Errorf("refusing to copy symlink %s -> %q (non-local target)", path, link)
+			if filepath.IsAbs(link) {
+				return fmt.Errorf("refusing to copy symlink %s -> %q (absolute target)", path, link)
+			}
+			resolved := filepath.Clean(filepath.Join(filepath.Dir(path), link))
+			cleanSrc := filepath.Clean(src)
+			if resolved != cleanSrc && !strings.HasPrefix(resolved, cleanSrc+string(os.PathSeparator)) {
+				return fmt.Errorf("refusing to copy symlink %s -> %q (escapes source directory)", path, link)
 			}
 			return os.Symlink(link, targetPath)
 		}
