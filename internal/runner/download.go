@@ -49,23 +49,34 @@ func downloadAndExtract(ctx context.Context, client *http.Client, logger *slog.L
 		return fmt.Errorf("download returned HTTP %d for %s", resp.StatusCode, url)
 	}
 
-	logger.DebugContext(ctx, "extracting runner archive", "content_length", resp.ContentLength)
+	logger.DebugContext(ctx, "downloading to temp file", "content_length", resp.ContentLength)
+	tmp, err := os.CreateTemp("", "ghr-runner-*.tar.gz")
+	if err != nil {
+		return fmt.Errorf("create temp file: %w", err)
+	}
+	defer os.Remove(tmp.Name())
+	defer tmp.Close()
+
 	hasher := sha256.New()
-	tee := io.TeeReader(resp.Body, hasher)
-
-	if err := extractTarGz(tee, destDir); err != nil {
-		return err
+	if _, err := io.Copy(tmp, io.TeeReader(resp.Body, hasher)); err != nil {
+		return fmt.Errorf("download tarball: %w", err)
 	}
-	if _, err := io.Copy(io.Discard, tee); err != nil {
-		return fmt.Errorf("drain tarball: %w", err)
-	}
+	resp.Body.Close()
 
-	logger.DebugContext(ctx, "verifying checksum")
 	if expected != "" {
 		got := hex.EncodeToString(hasher.Sum(nil))
 		if !strings.EqualFold(got, expected) {
 			return fmt.Errorf("checksum mismatch for %s: got %s, want %s", url, got, expected)
 		}
+	}
+
+	if _, err := tmp.Seek(0, io.SeekStart); err != nil {
+		return fmt.Errorf("seek temp file: %w", err)
+	}
+
+	logger.DebugContext(ctx, "extracting runner archive")
+	if err := extractTarGz(tmp, destDir); err != nil {
+		return err
 	}
 	return nil
 }
