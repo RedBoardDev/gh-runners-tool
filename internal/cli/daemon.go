@@ -151,11 +151,11 @@ func buildReporters(cfg *config.Config, logger *slog.Logger) []health.Reporter {
 }
 
 func resolveGitHubURL(creds *auth.Credentials, cfg *config.Config) (string, error) {
-	if creds.GitHubURL != "" {
-		return creds.GitHubURL, nil
-	}
 	if cfg.GitHub.URL != "" {
 		return cfg.GitHub.URL, nil
+	}
+	if creds.GitHubURL != "" {
+		return creds.GitHubURL, nil
 	}
 	return "", fmt.Errorf("github URL not configured: set it via 'ghr login' or in config github.url")
 }
