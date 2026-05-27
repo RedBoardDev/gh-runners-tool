@@ -14,9 +14,12 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
+
+var sha256DigestRe = regexp.MustCompile(`[0-9a-fA-F]{64}`)
 
 const downloadURLTemplate = "https://github.com/actions/runner/releases/download/v%s/actions-runner-osx-%s-%s.tar.gz"
 const releaseAPIURLTemplate = "https://api.github.com/repos/actions/runner/releases/tags/v%s"
@@ -155,11 +158,8 @@ func checksumFromReleaseBody(body, assetName string) (string, error) {
 		if !strings.Contains(line, assetName) {
 			continue
 		}
-		for _, field := range strings.Fields(line) {
-			candidate := strings.Trim(field, "-`|")
-			if isSHA256Digest(candidate) {
-				return strings.ToLower(candidate), nil
-			}
+		if m := sha256DigestRe.FindString(line); m != "" {
+			return strings.ToLower(m), nil
 		}
 		return "", fmt.Errorf("line for asset does not contain a sha-256 digest")
 	}
