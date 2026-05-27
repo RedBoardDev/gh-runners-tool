@@ -161,9 +161,8 @@ func checksumFromReleaseBody(body, assetName string) (string, error) {
 		if m := sha256DigestRe.FindString(line); m != "" {
 			return strings.ToLower(m), nil
 		}
-		return "", fmt.Errorf("line for asset does not contain a sha-256 digest")
 	}
-	return "", fmt.Errorf("asset not found in release body")
+	return "", fmt.Errorf("no sha-256 digest found for asset %s", assetName)
 }
 
 func isSHA256Digest(s string) bool {

@@ -108,22 +108,38 @@ func TestFetchRunnerReleaseChecksum(t *testing.T) {
 	const valid = "760899b29fd4e942076bcd1160a662bf83c15d9ce8a8cc466763aec7e582b21b"
 	const asset = "actions-runner-osx-arm64-2.334.0.tar.gz"
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(map[string]string{
-			"body": "## SHA-256 Checksums\n- " + asset + " " + valid + "\n",
-		}); err != nil {
-			t.Errorf("write response: %v", err)
-		}
-	}))
-	defer srv.Close()
-
-	got, err := fetchRunnerReleaseChecksum(context.Background(), srv.Client(), srv.URL, asset)
-	if err != nil {
-		t.Fatalf("fetchRunnerReleaseChecksum() error = %v", err)
+	tests := []struct {
+		name string
+		body string
+	}{
+		{
+			name: "plain field format",
+			body: "## SHA-256 Checksums\n- " + asset + " " + valid + "\n",
+		},
+		{
+			name: "html comment format",
+			body: "- " + asset + " <!-- BEGIN SHA osx-arm64 -->" + valid + "<!-- END SHA osx-arm64 -->\n",
+		},
 	}
-	if got != valid {
-		t.Fatalf("checksum = %q, want %q", got, valid)
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				if err := json.NewEncoder(w).Encode(map[string]string{"body": tc.body}); err != nil {
+					t.Errorf("write response: %v", err)
+				}
+			}))
+			defer srv.Close()
+
+			got, err := fetchRunnerReleaseChecksum(context.Background(), srv.Client(), srv.URL, asset)
+			if err != nil {
+				t.Fatalf("fetchRunnerReleaseChecksum() error = %v", err)
+			}
+			if got != valid {
+				t.Fatalf("checksum = %q, want %q", got, valid)
+			}
+		})
 	}
 }
 
