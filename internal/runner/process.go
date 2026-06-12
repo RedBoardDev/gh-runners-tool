@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -59,9 +60,23 @@ func (m *ProcessManager) Prepare(ctx context.Context, instance *model.RunnerInst
 
 func (m *ProcessManager) Start(ctx context.Context, instance *model.RunnerInstance, workdir, jitConfig string, logFile io.Writer) (*Process, error) {
 	runScript := filepath.Join(workdir, "run.sh")
+
+	// Isolate per-runner HOME and TMPDIR. Runners run as the same macOS user, so
+	// without this every concurrent job shares ~/.yarn, ~/.npm, ~/.cache and /tmp
+	// — tools that mutate those caches (e.g. Yarn's global store) then race across
+	// jobs and crash. These dirs live under the workdir, so Cleanup's RemoveAll
+	// wipes them automatically when the ephemeral runner exits.
+	runnerHome := filepath.Join(workdir, "_home")
+	runnerTmp := filepath.Join(workdir, "_tmp")
+	for _, dir := range []string{runnerHome, runnerTmp} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return nil, fmt.Errorf("create isolated dir %s: %w", dir, err)
+		}
+	}
+
 	cmd := exec.CommandContext(ctx, runScript)
 	cmd.Dir = workdir
-	cmd.Env = append(os.Environ(), "ACTIONS_RUNNER_INPUT_JITCONFIG="+jitConfig)
+	cmd.Env = runnerEnv(os.Environ(), jitConfig, runnerHome, runnerTmp)
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 
@@ -85,6 +100,36 @@ func (m *ProcessManager) Start(ctx context.Context, instance *model.RunnerInstan
 		StartedAt: time.Now(),
 		cmd:       cmd,
 	}, nil
+}
+
+// runnerEnv builds the child environment from parent, overriding the keys that
+// must be isolated per runner. Entries are replaced (not appended) so the child
+// never sees duplicate keys — with duplicates, getenv resolution is platform
+// dependent and our override could be silently ignored.
+func runnerEnv(parent []string, jitConfig, runnerHome, runnerTmp string) []string {
+	overrides := map[string]string{
+		"ACTIONS_RUNNER_INPUT_JITCONFIG": jitConfig,
+		"HOME":                           runnerHome,
+		"TMPDIR":                         runnerTmp,
+		"XDG_CACHE_HOME":                 filepath.Join(runnerHome, ".cache"),
+		"XDG_CONFIG_HOME":                filepath.Join(runnerHome, ".config"),
+		"XDG_DATA_HOME":                  filepath.Join(runnerHome, ".local", "share"),
+	}
+
+	env := make([]string, 0, len(parent)+len(overrides))
+	for _, kv := range parent {
+		key, _, found := strings.Cut(kv, "=")
+		if found {
+			if _, overridden := overrides[key]; overridden {
+				continue
+			}
+		}
+		env = append(env, kv)
+	}
+	for key, value := range overrides {
+		env = append(env, key+"="+value)
+	}
+	return env
 }
 
 func (m *ProcessManager) Stop(ctx context.Context, proc *Process) error {
