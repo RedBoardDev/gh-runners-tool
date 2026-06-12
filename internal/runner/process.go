@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -111,9 +112,14 @@ func runnerEnv(parent []string, jitConfig, runnerHome, runnerTmp string) []strin
 		"ACTIONS_RUNNER_INPUT_JITCONFIG": jitConfig,
 		"HOME":                           runnerHome,
 		"TMPDIR":                         runnerTmp,
-		"XDG_CACHE_HOME":                 filepath.Join(runnerHome, ".cache"),
-		"XDG_CONFIG_HOME":                filepath.Join(runnerHome, ".config"),
-		"XDG_DATA_HOME":                  filepath.Join(runnerHome, ".local", "share"),
+	}
+	// XDG vars are safe to override on macOS (the runner ignores them).
+	// On Linux the runner uses XDG_DATA_HOME for internal path resolution,
+	// so overriding it redirects _work to an unexpected location.
+	if runtime.GOOS == "darwin" {
+		overrides["XDG_CACHE_HOME"] = filepath.Join(runnerHome, ".cache")
+		overrides["XDG_CONFIG_HOME"] = filepath.Join(runnerHome, ".config")
+		overrides["XDG_DATA_HOME"] = filepath.Join(runnerHome, ".local", "share")
 	}
 
 	env := make([]string, 0, len(parent)+len(overrides))

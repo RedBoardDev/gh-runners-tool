@@ -21,12 +21,12 @@ import (
 
 var sha256DigestRe = regexp.MustCompile(`[0-9a-fA-F]{64}`)
 
-const downloadURLTemplate = "https://github.com/actions/runner/releases/download/v%s/actions-runner-osx-%s-%s.tar.gz"
+const downloadURLTemplate = "https://github.com/actions/runner/releases/download/v%s/actions-runner-%s-%s-%s.tar.gz"
 const releaseAPIURLTemplate = "https://api.github.com/repos/actions/runner/releases/tags/v%s"
 
 func downloadAndExtract(ctx context.Context, client *http.Client, logger *slog.Logger, version, destDir string) error {
-	assetName := fmt.Sprintf("actions-runner-osx-%s-%s.tar.gz", runnerArch(), version)
-	url := fmt.Sprintf(downloadURLTemplate, version, runnerArch(), version)
+	assetName := fmt.Sprintf("actions-runner-%s-%s-%s.tar.gz", runnerOS(), runnerArch(), version)
+	url := fmt.Sprintf(downloadURLTemplate, version, runnerOS(), runnerArch(), version)
 
 	checksumURL := fmt.Sprintf(releaseAPIURLTemplate, version)
 	logger.DebugContext(ctx, "fetching runner checksum", "url", checksumURL, "asset", assetName)

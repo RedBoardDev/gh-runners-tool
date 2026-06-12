@@ -180,3 +180,10 @@ func runnerArch() string {
 	}
 	return "x64"
 }
+
+func runnerOS() string {
+	if runtime.GOOS == "darwin" {
+		return "osx"
+	}
+	return "linux"
+}
