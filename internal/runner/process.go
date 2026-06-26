@@ -28,6 +28,7 @@ type Process struct {
 	Group     string
 	WorkDir   string
 	PID       int32
+	RunnerID  int
 	StartedAt time.Time
 	cmd       *exec.Cmd
 }

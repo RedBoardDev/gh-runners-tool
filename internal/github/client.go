@@ -108,14 +108,24 @@ func (c *Client) DeleteScaleSet(ctx context.Context, id int) error {
 	return nil
 }
 
-func (c *Client) GenerateJITConfig(ctx context.Context, scaleSetID int, runnerName string) (string, error) {
+func (c *Client) GenerateJITConfig(ctx context.Context, scaleSetID int, runnerName string) (string, int, error) {
 	jit, err := c.inner.GenerateJitRunnerConfig(ctx, &scaleset.RunnerScaleSetJitRunnerSetting{
 		Name: runnerName,
 	}, scaleSetID)
 	if err != nil {
-		return "", fmt.Errorf("generate JIT config for %q: %w", runnerName, err)
+		return "", 0, fmt.Errorf("generate JIT config for %q: %w", runnerName, err)
 	}
-	return jit.EncodedJITConfig, nil
+	if jit.Runner == nil {
+		return jit.EncodedJITConfig, 0, nil
+	}
+	return jit.EncodedJITConfig, jit.Runner.ID, nil
+}
+
+func (c *Client) RemoveRunner(ctx context.Context, runnerID int) error {
+	if err := c.inner.RemoveRunner(ctx, int64(runnerID)); err != nil {
+		return fmt.Errorf("remove runner %d: %w", runnerID, err)
+	}
+	return nil
 }
 
 func (c *Client) OpenSession(ctx context.Context, scaleSetID int, owner string) (*scaleset.MessageSessionClient, error) {

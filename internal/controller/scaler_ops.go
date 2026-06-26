@@ -5,23 +5,30 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"time"
 
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/logging"
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/model"
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/runner"
 )
 
-func (s *MacOSScaler) startRunner(ctx context.Context) error {
+func (s *MacOSScaler) startRunner(ctx context.Context) (err error) {
 	randBytes := make([]byte, 4)
-	if _, err := rand.Read(randBytes); err != nil {
-		return fmt.Errorf("generate runner ID: %w", err)
+	if _, randErr := rand.Read(randBytes); randErr != nil {
+		return fmt.Errorf("generate runner ID: %w", randErr)
 	}
 	name := fmt.Sprintf("%s-%s", s.groupName, hex.EncodeToString(randBytes))
 
-	jitConfig, err := s.client.GenerateJITConfig(ctx, s.scaleSetID, name)
+	jitConfig, runnerID, err := s.client.GenerateJITConfig(ctx, s.scaleSetID, name)
 	if err != nil {
 		return fmt.Errorf("generate JIT config for %q: %w", name, err)
 	}
+
+	defer func() {
+		if err != nil {
+			s.deregisterRunner(ctx, name, runnerID)
+		}
+	}()
 
 	instance := model.RunnerInstance{
 		Name:  name,
@@ -42,6 +49,7 @@ func (s *MacOSScaler) startRunner(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("start runner %q: %w", name, err)
 	}
+	proc.RunnerID = runnerID
 
 	s.idle[name] = proc
 
@@ -52,6 +60,29 @@ func (s *MacOSScaler) startRunner(ctx context.Context) error {
 	)
 
 	return nil
+}
+
+func (s *MacOSScaler) deregisterRunner(ctx context.Context, name string, runnerID int) {
+	if runnerID == 0 {
+		return
+	}
+
+	regCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
+	defer cancel()
+
+	if err := s.client.RemoveRunner(regCtx, runnerID); err != nil {
+		s.logger.WarnContext(ctx, "failed to deregister runner from GitHub",
+			logging.KeyRunner, name,
+			logging.KeyGroup, s.groupName,
+			logging.KeyError, err,
+		)
+		return
+	}
+
+	s.logger.InfoContext(ctx, "runner deregistered",
+		logging.KeyRunner, name,
+		logging.KeyGroup, s.groupName,
+	)
 }
 
 func (s *MacOSScaler) killRunner(ctx context.Context, runnerName string) error {
@@ -87,6 +118,8 @@ func (s *MacOSScaler) killRunner(ctx context.Context, runnerName string) error {
 			logging.KeyError, logsErr,
 		)
 	}
+
+	s.deregisterRunner(ctx, runnerName, proc.RunnerID)
 
 	s.logger.InfoContext(ctx, "killed runner", logging.KeyRunner, runnerName, logging.KeyGroup, s.groupName)
 	return nil

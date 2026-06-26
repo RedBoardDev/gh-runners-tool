@@ -18,7 +18,8 @@ type scaleSetClient interface {
 	GetScaleSet(ctx context.Context, runnerGroupID int, name string) (*scaleset.RunnerScaleSet, error)
 	CreateScaleSet(ctx context.Context, name string, runnerGroupID int, labels []string) (*scaleset.RunnerScaleSet, error)
 	DeleteScaleSet(ctx context.Context, id int) error
-	GenerateJITConfig(ctx context.Context, scaleSetID int, runnerName string) (string, error)
+	GenerateJITConfig(ctx context.Context, scaleSetID int, runnerName string) (string, int, error)
+	RemoveRunner(ctx context.Context, runnerID int) error
 	OpenSession(ctx context.Context, scaleSetID int, owner string) (*scaleset.MessageSessionClient, error)
 	NewListener(session *scaleset.MessageSessionClient, scaleSetID int, maxRunners int) (*listener.Listener, error)
 }
