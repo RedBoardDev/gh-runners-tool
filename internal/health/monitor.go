@@ -24,6 +24,9 @@ type Reporter interface {
 
 type RunnerKiller interface {
 	KillRunner(ctx context.Context, group string, runner string) error
+	// KillIdleRunner must refuse to kill a runner that has picked up a job
+	// since the health snapshot was taken.
+	KillIdleRunner(ctx context.Context, group string, runner string) error
 }
 
 type MonitorConfig struct {

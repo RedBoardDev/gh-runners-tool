@@ -54,12 +54,18 @@ func (f *fakeRunnerState) Snapshots() map[string][]model.RunnerSnapshot {
 }
 
 type fakeKiller struct {
-	killed []string
-	err    error
+	killed     []string
+	killedIdle []string
+	err        error
 }
 
 func (f *fakeKiller) KillRunner(_ context.Context, group string, runner string) error {
 	f.killed = append(f.killed, fmt.Sprintf("%s/%s", group, runner))
+	return f.err
+}
+
+func (f *fakeKiller) KillIdleRunner(_ context.Context, group string, runner string) error {
+	f.killedIdle = append(f.killedIdle, fmt.Sprintf("%s/%s", group, runner))
 	return f.err
 }
 
@@ -274,31 +280,95 @@ func TestCheckConsecutiveFailures(t *testing.T) {
 	}
 }
 
-func TestCheckRunnerTimeouts_KillsRunner(t *testing.T) {
-	killer := &fakeKiller{}
-	m := NewMonitor(
-		MonitorConfig{
-			Enabled:       true,
-			RunnerTimeout: 1 * time.Hour,
+func TestCheckRunnerTimeouts(t *testing.T) {
+	tests := []struct {
+		name          string
+		runnerTimeout time.Duration
+		snapshot      model.RunnerSnapshot
+		wantKills     int
+	}{
+		{
+			name:          "disabled when timeout is zero",
+			runnerTimeout: 0,
+			snapshot:      model.RunnerSnapshot{Name: "r1", State: "busy", StartedAt: time.Now().Add(-3 * time.Hour), BusySince: time.Now().Add(-3 * time.Hour)},
+			wantKills:     0,
 		},
-		&noopNotifier{},
-		nil,
-		nil,
-		killer,
-		noopLogger(),
-	)
+		{
+			// pins the 2026-07-20 mid-job kills: warm-pool runners hours old
+			// were reaped seconds after picking up their first job.
+			name:          "old warm-pool runner fresh on its job is not killed",
+			runnerTimeout: 1 * time.Hour,
+			snapshot:      model.RunnerSnapshot{Name: "r1", State: "busy", StartedAt: time.Now().Add(-3 * time.Hour), BusySince: time.Now().Add(-1 * time.Minute)},
+			wantKills:     0,
+		},
+		{
+			name:          "busy past timeout since job start is killed",
+			runnerTimeout: 1 * time.Hour,
+			snapshot:      model.RunnerSnapshot{Name: "r1", State: "busy", StartedAt: time.Now().Add(-3 * time.Hour), BusySince: time.Now().Add(-2 * time.Hour)},
+			wantKills:     1,
+		},
+		{
+			name:          "falls back to StartedAt when BusySince is zero",
+			runnerTimeout: 1 * time.Hour,
+			snapshot:      model.RunnerSnapshot{Name: "r1", State: "busy", StartedAt: time.Now().Add(-2 * time.Hour)},
+			wantKills:     1,
+		},
+		{
+			name:          "busy under timeout is not killed",
+			runnerTimeout: 1 * time.Hour,
+			snapshot:      model.RunnerSnapshot{Name: "r1", State: "busy", StartedAt: time.Now().Add(-3 * time.Hour), BusySince: time.Now().Add(-30 * time.Minute)},
+			wantKills:     0,
+		},
+		{
+			name:          "idle runners are skipped",
+			runnerTimeout: 1 * time.Hour,
+			snapshot:      model.RunnerSnapshot{Name: "r1", State: "idle", StartedAt: time.Now().Add(-3 * time.Hour)},
+			wantKills:     0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			killer := &fakeKiller{}
+			m := newTestMonitor(nil, killer, nil)
+			m.cfg.RunnerTimeout = tt.runnerTimeout
+			m.issues = m.issues[:0]
+
+			m.checkRunnerTimeouts(context.Background(), "group-a", []model.RunnerSnapshot{tt.snapshot})
+
+			if len(killer.killed) != tt.wantKills {
+				t.Fatalf("expected %d kill calls, got %d", tt.wantKills, len(killer.killed))
+			}
+			if len(m.issues) != tt.wantKills {
+				t.Fatalf("expected %d issues, got %d", tt.wantKills, len(m.issues))
+			}
+			if tt.wantKills > 0 && killer.killed[0] != "group-a/r1" {
+				t.Errorf("expected kill group-a/r1, got %s", killer.killed[0])
+			}
+			if len(killer.killedIdle) != 0 {
+				t.Errorf("expected no idle kill calls, got %d", len(killer.killedIdle))
+			}
+		})
+	}
+}
+
+func TestCheckIdleTimeouts_UsesIdleKill(t *testing.T) {
+	killer := &fakeKiller{}
+	m := newTestMonitor(nil, killer, nil)
+	m.cfg.IdleTimeout = 30 * time.Minute
+	m.issues = m.issues[:0]
 
 	snaps := []model.RunnerSnapshot{
-		{Name: "r1", State: "busy", PID: 1, StartedAt: time.Now().Add(-2 * time.Hour)},
+		{Name: "r1", State: "idle", StartedAt: time.Now().Add(-1 * time.Hour)},
 	}
 
-	m.checkRunnerTimeouts(context.Background(), "group-a", snaps)
+	m.checkIdleTimeouts(context.Background(), "group-a", snaps)
 
-	if len(killer.killed) != 1 {
-		t.Fatalf("expected 1 kill call, got %d", len(killer.killed))
+	if len(killer.killedIdle) != 1 || killer.killedIdle[0] != "group-a/r1" {
+		t.Fatalf("expected idle kill group-a/r1, got %v", killer.killedIdle)
 	}
-	if killer.killed[0] != "group-a/r1" {
-		t.Errorf("expected kill group-a/r1, got %s", killer.killed[0])
+	if len(killer.killed) != 0 {
+		t.Fatalf("expected no unconditional kill calls, got %v", killer.killed)
 	}
 }
 

@@ -99,6 +99,34 @@ func (s *MacOSScaler) killRunner(ctx context.Context, runnerName string) error {
 		return fmt.Errorf("runner %q not found in group %q", runnerName, s.groupName)
 	}
 
+	return s.teardownRunner(ctx, runnerName, proc)
+}
+
+// killIdleRunner tears down a runner only if it is still idle: between the
+// health snapshot and the kill, the runner may have picked up a job, and
+// killing it then would destroy the job's workspace mid-run.
+func (s *MacOSScaler) killIdleRunner(ctx context.Context, runnerName string) error {
+	s.mu.Lock()
+	proc, isIdle := s.idle[runnerName]
+	if !isIdle {
+		_, isBusy := s.busy[runnerName]
+		s.mu.Unlock()
+		if isBusy {
+			s.logger.InfoContext(ctx, "skipping idle kill, runner picked up a job",
+				logging.KeyRunner, runnerName,
+				logging.KeyGroup, s.groupName,
+			)
+			return nil
+		}
+		return fmt.Errorf("runner %q not found in group %q", runnerName, s.groupName)
+	}
+	delete(s.idle, runnerName)
+	s.mu.Unlock()
+
+	return s.teardownRunner(ctx, runnerName, proc)
+}
+
+func (s *MacOSScaler) teardownRunner(ctx context.Context, runnerName string, proc *runner.Process) error {
 	stopErr := s.process.Stop(ctx, proc)
 	if stopErr != nil {
 		s.logger.WarnContext(ctx, "failed to stop runner during kill",
@@ -183,6 +211,7 @@ func (s *MacOSScaler) Snapshots() []model.RunnerSnapshot {
 			State:     "busy",
 			PID:       proc.PID,
 			StartedAt: proc.StartedAt,
+			BusySince: proc.BusySince,
 		})
 	}
 	return snapshots

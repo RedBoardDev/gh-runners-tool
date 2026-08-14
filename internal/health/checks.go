@@ -123,10 +123,17 @@ func (m *Monitor) checkRunnerTimeouts(ctx context.Context, group string, snapsho
 		if snap.State != "busy" {
 			continue
 		}
-		if snap.StartedAt.IsZero() {
+		// Clock from the idle→busy transition, not process start: a warm-pool
+		// runner can be hours old when it picks up its first job, and clocking
+		// from StartedAt killed it mid-job on the next health tick.
+		busySince := snap.BusySince
+		if busySince.IsZero() {
+			busySince = snap.StartedAt
+		}
+		if busySince.IsZero() {
 			continue
 		}
-		if now.Sub(snap.StartedAt) <= m.cfg.RunnerTimeout {
+		if now.Sub(busySince) <= m.cfg.RunnerTimeout {
 			continue
 		}
 		m.issues = append(m.issues, model.HealthIssue{
@@ -134,7 +141,7 @@ func (m *Monitor) checkRunnerTimeouts(ctx context.Context, group string, snapsho
 			Type:       model.EventHealthRunnerTimeout,
 			Group:      group,
 			Runner:     snap.Name,
-			Message:    fmt.Sprintf("runner %s has been busy for %s (timeout: %s)", snap.Name, now.Sub(snap.StartedAt).Round(time.Second), m.cfg.RunnerTimeout),
+			Message:    fmt.Sprintf("runner %s has been busy for %s (timeout: %s)", snap.Name, now.Sub(busySince).Round(time.Second), m.cfg.RunnerTimeout),
 			DetectedAt: now,
 		})
 		if m.killer != nil {
@@ -187,7 +194,7 @@ func (m *Monitor) checkIdleTimeouts(ctx context.Context, group string, snapshots
 			DetectedAt: now,
 		})
 		if m.killer != nil {
-			if killErr := m.killer.KillRunner(ctx, group, snap.Name); killErr != nil {
+			if killErr := m.killer.KillIdleRunner(ctx, group, snap.Name); killErr != nil {
 				m.logger.ErrorContext(ctx, "failed to kill idle runner", logging.KeyGroup, group, logging.KeyRunner, snap.Name, logging.KeyError, killErr)
 			}
 		}

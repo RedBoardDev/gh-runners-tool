@@ -142,6 +142,18 @@ func (c *GroupController) KillRunner(ctx context.Context, group, runnerName stri
 	return s.killRunner(ctx, runnerName)
 }
 
+func (c *GroupController) KillIdleRunner(ctx context.Context, group, runnerName string) error {
+	c.mu.Lock()
+	s, ok := c.scalers[group]
+	c.mu.Unlock()
+
+	if !ok {
+		return fmt.Errorf("kill idle runner %s: group %q not found", runnerName, group)
+	}
+
+	return s.killIdleRunner(ctx, runnerName)
+}
+
 func (c *GroupController) registerScaler(name string, s *MacOSScaler) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
