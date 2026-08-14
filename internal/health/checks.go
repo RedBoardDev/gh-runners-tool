@@ -91,7 +91,8 @@ func dispatchHealthReports(ctx context.Context, reporters []Reporter, notifier N
 }
 
 func (m *Monitor) checkRunnerLiveness(ctx context.Context, group string, snapshots []model.RunnerSnapshot) {
-	for _, snap := range snapshots {
+	for i := range snapshots {
+		snap := &snapshots[i]
 		if snap.PID <= 0 {
 			continue
 		}
@@ -119,7 +120,8 @@ func (m *Monitor) checkRunnerTimeouts(ctx context.Context, group string, snapsho
 	}
 
 	now := time.Now()
-	for _, snap := range snapshots {
+	for i := range snapshots {
+		snap := &snapshots[i]
 		if snap.State != "busy" {
 			continue
 		}
@@ -164,24 +166,26 @@ func (m *Monitor) checkIdleTimeouts(ctx context.Context, group string, snapshots
 
 	now := time.Now()
 	var timedOut []model.RunnerSnapshot
-	for _, snap := range snapshots {
+	for i := range snapshots {
+		snap := &snapshots[i]
 		if snap.State != "idle" || snap.StartedAt.IsZero() {
 			continue
 		}
 		if now.Sub(snap.StartedAt) > m.cfg.IdleTimeout {
-			timedOut = append(timedOut, snap)
+			timedOut = append(timedOut, *snap)
 		}
 	}
 
 	idleCount := 0
-	for _, snap := range snapshots {
-		if snap.State == "idle" {
+	for i := range snapshots {
+		if snapshots[i].State == "idle" {
 			idleCount++
 		}
 	}
 
 	killable := idleCount - minRunners
-	for _, snap := range timedOut {
+	for i := range timedOut {
+		snap := &timedOut[i]
 		if killable <= 0 {
 			break
 		}

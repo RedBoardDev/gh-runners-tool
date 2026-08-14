@@ -148,7 +148,7 @@ func splitList(s string) []string {
 // selectJobContainers returns the ids of every container tied to the workdir —
 // directly via a bind mount, or indirectly via a github_network_* shared with
 // a mount-matched container — plus the job networks to remove.
-func selectJobContainers(containers []containerInfo, workdir string) ([]string, []string) {
+func selectJobContainers(containers []containerInfo, workdir string) (ids, networks []string) {
 	prefix := strings.TrimRight(workdir, "/") + "/"
 	jobNetworks := map[string]bool{}
 
@@ -165,7 +165,7 @@ func selectJobContainers(containers []containerInfo, workdir string) ([]string, 
 		}
 	}
 
-	var ids, networks []string
+	networks = make([]string, 0, len(jobNetworks))
 	for _, c := range containers {
 		matched := false
 		for _, mount := range c.mounts {

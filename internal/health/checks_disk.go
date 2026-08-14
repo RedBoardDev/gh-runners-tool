@@ -20,6 +20,7 @@ func (m *Monitor) checkDiskSpace() {
 		return
 	}
 
+	//nolint:unconvert // Bsize is int64 on linux but uint32 on darwin; drop the conversion and the darwin build stops compiling.
 	available := int64(stat.Bavail) * int64(stat.Bsize)
 	if available < m.cfg.MinDiskSpace {
 		m.issues = append(m.issues, model.HealthIssue{

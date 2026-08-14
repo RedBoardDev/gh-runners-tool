@@ -32,7 +32,6 @@ func (f *fakeScaleSetClient) RemoveRunner(_ context.Context, id int) error {
 }
 
 type fakeProcess struct {
-	runnerStarter
 	prepareErr error
 	startErr   error
 	startProc  *runner.Process
