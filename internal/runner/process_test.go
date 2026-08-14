@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -117,7 +118,18 @@ func TestRunnerEnvIsolatesHome(t *testing.T) {
 	if got["PATH"] != "/usr/bin:/bin" {
 		t.Fatalf("non-overridden parent var must be preserved: PATH=%q", got["PATH"])
 	}
-	for _, key := range []string{"XDG_CACHE_HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME"} {
+	xdgKeys := []string{"XDG_CACHE_HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME"}
+	if runtime.GOOS != "darwin" {
+		// The linux runner resolves _work from XDG_DATA_HOME, so overriding these
+		// moves the job workspace somewhere the daemon never looks for it.
+		for _, key := range xdgKeys {
+			if got[key] != "" {
+				t.Fatalf("%s must not be overridden on %s: got %q", key, runtime.GOOS, got[key])
+			}
+		}
+		return
+	}
+	for _, key := range xdgKeys {
 		if !strings.HasPrefix(got[key], home+string(filepath.Separator)) {
 			t.Fatalf("%s must live under the isolated home: got %q", key, got[key])
 		}
