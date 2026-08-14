@@ -46,6 +46,15 @@ func copyDir(src, dst string) error {
 }
 
 func copyFile(src, dst string, mode os.FileMode) error {
+	// Link instead of duplicating the bytes: the runner bits are read-only for
+	// the job's lifetime, and a full copy rewrites the whole runner release per
+	// provisioned runner. Make anything write to a linked file IN PLACE and the
+	// change lands in the shared cache, breaking every runner provisioned after
+	// it. Any failure here (cross-device, link limit) falls through to the copy.
+	if err := os.Link(src, dst); err == nil {
+		return nil
+	}
+
 	in, err := os.Open(src)
 	if err != nil {
 		return fmt.Errorf("open source %s: %w", src, err)
