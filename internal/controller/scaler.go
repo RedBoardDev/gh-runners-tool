@@ -103,6 +103,7 @@ func (s *MacOSScaler) HandleJobStarted(ctx context.Context, jobInfo *scaleset.Jo
 	}
 
 	delete(s.idle, jobInfo.RunnerName)
+	proc.BusySince = time.Now()
 	s.busy[jobInfo.RunnerName] = proc
 
 	s.logger.InfoContext(ctx, "job started",

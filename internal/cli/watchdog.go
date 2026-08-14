@@ -12,9 +12,14 @@ import (
 )
 
 const (
-	watchdogInterval         = 30 * time.Second
-	watchdogTimeout          = 5 * time.Second
-	watchdogFailureThreshold = 3
+	watchdogInterval = 30 * time.Second
+	// A CI host runs at high, bursty load by design: under CPU saturation the
+	// daemon stays alive but its HTTP goroutine can take seconds to be
+	// scheduled. A tight probe then trips the watchdog and os.Exit(2) kills
+	// every in-flight job. Tolerances are sized so the watchdog only fires when
+	// the daemon is genuinely wedged (~2.5min unresponsive), not merely busy.
+	watchdogTimeout          = 20 * time.Second
+	watchdogFailureThreshold = 5
 )
 
 // runWatchdog probes the daemon's own /health endpoint over the unix socket.

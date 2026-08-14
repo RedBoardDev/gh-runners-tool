@@ -91,7 +91,8 @@ func dispatchHealthReports(ctx context.Context, reporters []Reporter, notifier N
 }
 
 func (m *Monitor) checkRunnerLiveness(ctx context.Context, group string, snapshots []model.RunnerSnapshot) {
-	for _, snap := range snapshots {
+	for i := range snapshots {
+		snap := &snapshots[i]
 		if snap.PID <= 0 {
 			continue
 		}
@@ -119,14 +120,22 @@ func (m *Monitor) checkRunnerTimeouts(ctx context.Context, group string, snapsho
 	}
 
 	now := time.Now()
-	for _, snap := range snapshots {
+	for i := range snapshots {
+		snap := &snapshots[i]
 		if snap.State != "busy" {
 			continue
 		}
-		if snap.StartedAt.IsZero() {
+		// Clock from the idle→busy transition, not process start: a warm-pool
+		// runner can be hours old when it picks up its first job, and clocking
+		// from StartedAt killed it mid-job on the next health tick.
+		busySince := snap.BusySince
+		if busySince.IsZero() {
+			busySince = snap.StartedAt
+		}
+		if busySince.IsZero() {
 			continue
 		}
-		if now.Sub(snap.StartedAt) <= m.cfg.RunnerTimeout {
+		if now.Sub(busySince) <= m.cfg.RunnerTimeout {
 			continue
 		}
 		m.issues = append(m.issues, model.HealthIssue{
@@ -134,7 +143,7 @@ func (m *Monitor) checkRunnerTimeouts(ctx context.Context, group string, snapsho
 			Type:       model.EventHealthRunnerTimeout,
 			Group:      group,
 			Runner:     snap.Name,
-			Message:    fmt.Sprintf("runner %s has been busy for %s (timeout: %s)", snap.Name, now.Sub(snap.StartedAt).Round(time.Second), m.cfg.RunnerTimeout),
+			Message:    fmt.Sprintf("runner %s has been busy for %s (timeout: %s)", snap.Name, now.Sub(busySince).Round(time.Second), m.cfg.RunnerTimeout),
 			DetectedAt: now,
 		})
 		if m.killer != nil {
@@ -157,24 +166,26 @@ func (m *Monitor) checkIdleTimeouts(ctx context.Context, group string, snapshots
 
 	now := time.Now()
 	var timedOut []model.RunnerSnapshot
-	for _, snap := range snapshots {
+	for i := range snapshots {
+		snap := &snapshots[i]
 		if snap.State != "idle" || snap.StartedAt.IsZero() {
 			continue
 		}
 		if now.Sub(snap.StartedAt) > m.cfg.IdleTimeout {
-			timedOut = append(timedOut, snap)
+			timedOut = append(timedOut, *snap)
 		}
 	}
 
 	idleCount := 0
-	for _, snap := range snapshots {
-		if snap.State == "idle" {
+	for i := range snapshots {
+		if snapshots[i].State == "idle" {
 			idleCount++
 		}
 	}
 
 	killable := idleCount - minRunners
-	for _, snap := range timedOut {
+	for i := range timedOut {
+		snap := &timedOut[i]
 		if killable <= 0 {
 			break
 		}
@@ -187,7 +198,7 @@ func (m *Monitor) checkIdleTimeouts(ctx context.Context, group string, snapshots
 			DetectedAt: now,
 		})
 		if m.killer != nil {
-			if killErr := m.killer.KillRunner(ctx, group, snap.Name); killErr != nil {
+			if killErr := m.killer.KillIdleRunner(ctx, group, snap.Name); killErr != nil {
 				m.logger.ErrorContext(ctx, "failed to kill idle runner", logging.KeyGroup, group, logging.KeyRunner, snap.Name, logging.KeyError, killErr)
 			}
 		}

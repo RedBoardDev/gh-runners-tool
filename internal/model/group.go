@@ -23,6 +23,7 @@ type RunnerSnapshot struct {
 	State     string    `json:"state"`
 	PID       int32     `json:"pid"`
 	StartedAt time.Time `json:"started_at"`
+	BusySince time.Time `json:"busy_since"`
 	JobName   string    `json:"job_name"`
 	JobID     string    `json:"job_id"`
 }

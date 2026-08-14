@@ -82,7 +82,9 @@ func (m *ProcessManager) cleanupStaleRunner(ctx context.Context, group, runner s
 }
 
 func (m *ProcessManager) removeStaleDir(ctx context.Context, dir string) bool {
-	if err := os.RemoveAll(dir); err != nil {
+	m.CleanupJobContainers(ctx, dir)
+
+	if err := m.RemoveDirWithDockerFallback(ctx, dir); err != nil {
 		m.logger.WarnContext(ctx, "failed to remove stale workdir", logging.KeyDir, dir, logging.KeyError, err)
 		return false
 	}

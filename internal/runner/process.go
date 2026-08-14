@@ -30,6 +30,9 @@ type Process struct {
 	PID       int32
 	RunnerID  int
 	StartedAt time.Time
+	// BusySince is zero until the runner picks up a job; written under the
+	// scaler mutex on the idle→busy transition.
+	BusySince time.Time
 	cmd       *exec.Cmd
 }
 
@@ -194,7 +197,11 @@ func isExpectedExit(err error) bool {
 }
 
 func (m *ProcessManager) Cleanup(proc *Process) error {
-	if err := os.RemoveAll(proc.WorkDir); err != nil {
+	// Job containers bind-mount the workdir: remove them (and their networks)
+	// before the workdir, or they leak when a runner is killed mid-job.
+	m.CleanupJobContainers(context.Background(), proc.WorkDir)
+
+	if err := m.RemoveDirWithDockerFallback(context.Background(), proc.WorkDir); err != nil {
 		return fmt.Errorf("remove workdir %s: %w", proc.WorkDir, err)
 	}
 	return nil

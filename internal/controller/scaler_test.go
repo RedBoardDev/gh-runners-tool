@@ -192,6 +192,28 @@ func TestHandleJobStarted_MovesToBusy(t *testing.T) {
 	if _, ok := s.busy["r-1"]; !ok {
 		t.Fatal("expected runner to be in busy")
 	}
+	if proc.BusySince.IsZero() {
+		t.Fatal("expected BusySince to be set on the idle→busy transition")
+	}
+}
+
+func TestSnapshots_BusySincePropagated(t *testing.T) {
+	started := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
+	busySince := started.Add(3 * time.Hour)
+
+	s := newTestScaler(func(scaler *MacOSScaler) {
+		scaler.busy = map[string]*runner.Process{
+			"r-busy": {Name: "r-busy", Group: "test-group", PID: 200, StartedAt: started, BusySince: busySince},
+		}
+	})
+
+	snapshots := s.Snapshots()
+	if len(snapshots) != 1 {
+		t.Fatalf("expected 1 snapshot, got %d", len(snapshots))
+	}
+	if !snapshots[0].BusySince.Equal(busySince) {
+		t.Fatalf("expected BusySince %v, got %v", busySince, snapshots[0].BusySince)
+	}
 }
 
 func TestHandleJobCompleted_NotFound(t *testing.T) {

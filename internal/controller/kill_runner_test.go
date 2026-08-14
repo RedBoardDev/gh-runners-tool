@@ -43,3 +43,15 @@ func TestKillRunner_RunnerNotFound(t *testing.T) {
 		t.Fatal("expected error for missing runner")
 	}
 }
+
+func TestKillIdleRunner_GroupNotFound(t *testing.T) {
+	c := &GroupController{
+		scalers: make(map[string]*MacOSScaler),
+		logger:  testLogger(),
+	}
+
+	err := c.KillIdleRunner(context.Background(), "missing-group", "r1")
+	if err == nil {
+		t.Fatal("expected error for missing group")
+	}
+}

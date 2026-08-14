@@ -32,7 +32,6 @@ func (f *fakeScaleSetClient) RemoveRunner(_ context.Context, id int) error {
 }
 
 type fakeProcess struct {
-	runnerStarter
 	prepareErr error
 	startErr   error
 	startProc  *runner.Process
@@ -155,6 +154,67 @@ func TestKillRunner_DeregistersRunner(t *testing.T) {
 
 	if len(client.removed) != 1 || client.removed[0] != 99 {
 		t.Fatalf("expected runner 99 deregistered, got %v", client.removed)
+	}
+}
+
+func TestKillIdleRunner_KillsIdle(t *testing.T) {
+	client := &fakeScaleSetClient{}
+	s := &MacOSScaler{
+		client:    client,
+		process:   &fakeProcess{},
+		logMgr:    tempLogMgr(t),
+		groupName: "kare-qa",
+		logger:    testLogger(),
+		idle:      map[string]*runner.Process{"kare-qa-1": {Name: "kare-qa-1", RunnerID: 33}},
+		busy:      make(map[string]*runner.Process),
+	}
+
+	if err := s.killIdleRunner(context.Background(), "kare-qa-1"); err != nil {
+		t.Fatalf("killIdleRunner: %v", err)
+	}
+
+	if len(client.removed) != 1 || client.removed[0] != 33 {
+		t.Fatalf("expected runner 33 deregistered, got %v", client.removed)
+	}
+	if len(s.idle) != 0 {
+		t.Fatalf("expected runner removed from idle, got %d", len(s.idle))
+	}
+}
+
+func TestKillIdleRunner_SkipsWhenBusy(t *testing.T) {
+	client := &fakeScaleSetClient{}
+	s := &MacOSScaler{
+		client:    client,
+		process:   &fakeProcess{},
+		logMgr:    tempLogMgr(t),
+		groupName: "kare-qa",
+		logger:    testLogger(),
+		idle:      make(map[string]*runner.Process),
+		busy:      map[string]*runner.Process{"kare-qa-1": {Name: "kare-qa-1", RunnerID: 33}},
+	}
+
+	if err := s.killIdleRunner(context.Background(), "kare-qa-1"); err != nil {
+		t.Fatalf("expected nil error when runner became busy, got %v", err)
+	}
+
+	if len(client.removed) != 0 {
+		t.Fatalf("expected no deregistration, got %v", client.removed)
+	}
+	if _, ok := s.busy["kare-qa-1"]; !ok {
+		t.Fatal("expected busy runner to be left running")
+	}
+}
+
+func TestKillIdleRunner_NotFound(t *testing.T) {
+	s := &MacOSScaler{
+		groupName: "kare-qa",
+		logger:    testLogger(),
+		idle:      make(map[string]*runner.Process),
+		busy:      make(map[string]*runner.Process),
+	}
+
+	if err := s.killIdleRunner(context.Background(), "kare-qa-missing"); err == nil {
+		t.Fatal("expected error for missing runner")
 	}
 }
 

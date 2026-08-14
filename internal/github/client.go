@@ -108,7 +108,7 @@ func (c *Client) DeleteScaleSet(ctx context.Context, id int) error {
 	return nil
 }
 
-func (c *Client) GenerateJITConfig(ctx context.Context, scaleSetID int, runnerName string) (string, int, error) {
+func (c *Client) GenerateJITConfig(ctx context.Context, scaleSetID int, runnerName string) (encodedConfig string, runnerID int, err error) {
 	jit, err := c.inner.GenerateJitRunnerConfig(ctx, &scaleset.RunnerScaleSetJitRunnerSetting{
 		Name: runnerName,
 	}, scaleSetID)
