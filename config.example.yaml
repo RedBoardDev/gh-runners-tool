@@ -14,6 +14,18 @@ groups:
     min_runners: 0
     labels:
       - "macos"
+    # priority: 0          # higher is served first when capacity is configured
+    # reserve:             # held by each runner of this group while it exists
+    #   memory: "2G"
+    #   cpus: 1
+    # resources:           # per-runner cgroup limits, Linux cgroup v2 only
+    #   memory_max: "4G"
+    #   memory_high: "3G"
+    #   cpu_weight: 100
+
+# capacity:                # host-wide budget shared by all groups
+#   memory: "48G"
+#   cpus: 40
 
 health:
   enabled: true

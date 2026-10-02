@@ -10,6 +10,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/RedBoardDev/gh-runners-tool/v2/internal/capacity"
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/health"
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/logging"
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/model"
@@ -24,21 +25,38 @@ type healthState interface {
 	Status() health.HealthStatus
 }
 
+type capacityState interface {
+	Status() capacity.Status
+}
+
 type Server struct {
 	socketPath string
 	controller controllerState
 	health     healthState
+	capacity   capacityState
 	logger     *slog.Logger
 	listener   net.Listener
 }
 
-func NewServer(stateDir string, controller controllerState, healthProvider healthState, logger *slog.Logger) *Server {
-	return &Server{
+type ServerOption func(*Server)
+
+func WithCapacity(c capacityState) ServerOption {
+	return func(s *Server) {
+		s.capacity = c
+	}
+}
+
+func NewServer(stateDir string, controller controllerState, healthProvider healthState, logger *slog.Logger, opts ...ServerOption) *Server {
+	s := &Server{
 		socketPath: state.New(stateDir).Socket(),
 		controller: controller,
 		health:     healthProvider,
 		logger:     logger,
 	}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
 
 func (s *Server) Run(ctx context.Context) error {

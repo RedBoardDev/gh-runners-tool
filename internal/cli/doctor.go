@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/auth"
+	"github.com/RedBoardDev/gh-runners-tool/v2/internal/cgroup"
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/config"
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/doctor"
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/launchd"
@@ -92,9 +93,35 @@ func buildChecks() []doctor.Check {
 		doctor.CredentialsCheck{Path: credsPath, Method: credsMethod, PrivateKeyPath: keyPath},
 		doctor.GitHubAPICheck{BaseURL: cfg.GitHub.URL, Token: token},
 		doctor.DiskCheck{Paths: []string{stateDir, cfg.Runner.CacheDir}, MinFree: 1 << 30},
+		doctor.CgroupCheck{
+			Enabled: cgroup.Supported && anyGroupHasResources(cfg),
+			NeedCPU: anyGroupHasCPUWeight(cfg),
+			Root:    cgroup.DefaultRoot,
+			PIDFile: state.New(stateDir).PIDFile(),
+		},
 		doctor.RunnerCheck{CacheDir: cfg.Runner.CacheDir},
 		doctor.CacheCheck{Path: cfg.Runner.CacheDir},
 	}
+}
+
+func anyGroupHasCPUWeight(cfg *config.Config) bool {
+	for i := range cfg.Groups {
+		g := &cfg.Groups[i]
+		if g.Resources.CPUWeight > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func anyGroupHasResources(cfg *config.Config) bool {
+	for i := range cfg.Groups {
+		g := &cfg.Groups[i]
+		if !g.Resources.IsZero() {
+			return true
+		}
+	}
+	return false
 }
 
 func loadDoctorConfig() *config.Config {

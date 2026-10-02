@@ -98,7 +98,8 @@ func stopDaemonIfRunning() {
 
 func purgeScaleSets(ctx context.Context, ghClient *github.Client, cfg *config.Config, force bool, timeout time.Duration) int {
 	deletedSets := 0
-	for _, g := range cfg.Groups {
+	for i := range cfg.Groups {
+		g := &cfg.Groups[i]
 		fmt.Printf("purging scale set %q...\n", g.Name)
 		ss, getErr := ghClient.GetScaleSet(ctx, cfg.GitHub.RunnerGroupID, g.Name)
 		if getErr != nil {

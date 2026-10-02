@@ -7,12 +7,19 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/RedBoardDev/gh-runners-tool/v2/internal/capacity"
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/logging"
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/model"
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/runner"
 )
 
-func (s *MacOSScaler) startRunner(ctx context.Context) (err error) {
+func (s *MacOSScaler) startRunner(ctx context.Context, lease *capacity.Lease) (err error) {
+	defer func() {
+		if err != nil {
+			lease.Cancel()
+		}
+	}()
+
 	randBytes := make([]byte, 4)
 	if _, randErr := rand.Read(randBytes); randErr != nil {
 		return fmt.Errorf("generate runner ID: %w", randErr)
@@ -52,6 +59,8 @@ func (s *MacOSScaler) startRunner(ctx context.Context) (err error) {
 	proc.RunnerID = runnerID
 
 	s.idle[name] = proc
+	s.trackLease(name, lease)
+	s.watchIdleExit(ctx, name, proc)
 
 	s.logger.InfoContext(ctx, "runner provisioned",
 		logging.KeyRunner, name,
@@ -127,6 +136,17 @@ func (s *MacOSScaler) killIdleRunner(ctx context.Context, runnerName string) err
 }
 
 func (s *MacOSScaler) teardownRunner(ctx context.Context, runnerName string, proc *runner.Process) error {
+	if err := s.teardownProcess(ctx, runnerName, proc); err != nil {
+		return err
+	}
+
+	s.deregisterRunner(ctx, runnerName, proc.RunnerID)
+
+	s.logger.InfoContext(ctx, "killed runner", logging.KeyRunner, runnerName, logging.KeyGroup, s.groupName)
+	return nil
+}
+
+func (s *MacOSScaler) teardownProcess(ctx context.Context, runnerName string, proc *runner.Process) error {
 	stopErr := s.process.Stop(ctx, proc)
 	if stopErr != nil {
 		s.logger.WarnContext(ctx, "failed to stop runner during kill",
@@ -136,6 +156,7 @@ func (s *MacOSScaler) teardownRunner(ctx context.Context, runnerName string, pro
 	}
 
 	cleanupErr := s.process.Cleanup(proc)
+	s.releaseLease(runnerName)
 	if cleanupErr != nil {
 		return fmt.Errorf("cleanup runner %q: %w", runnerName, cleanupErr)
 	}
@@ -146,44 +167,47 @@ func (s *MacOSScaler) teardownRunner(ctx context.Context, runnerName string, pro
 			logging.KeyError, logsErr,
 		)
 	}
-
-	s.deregisterRunner(ctx, runnerName, proc.RunnerID)
-
-	s.logger.InfoContext(ctx, "killed runner", logging.KeyRunner, runnerName, logging.KeyGroup, s.groupName)
 	return nil
 }
 
 func (s *MacOSScaler) Shutdown(ctx context.Context) {
-	s.mu.Lock()
-	allProcs := make([]*runner.Process, 0, len(s.idle)+len(s.busy))
-	for _, p := range s.idle {
-		allProcs = append(allProcs, p)
+	type tracked struct {
+		name string
+		proc *runner.Process
 	}
-	for _, p := range s.busy {
-		allProcs = append(allProcs, p)
+
+	s.mu.Lock()
+	all := make([]tracked, 0, len(s.idle)+len(s.busy))
+	for name, p := range s.idle {
+		all = append(all, tracked{name, p})
+	}
+	for name, p := range s.busy {
+		all = append(all, tracked{name, p})
 	}
 	s.idle = make(map[string]*runner.Process)
 	s.busy = make(map[string]*runner.Process)
+	s.stopped = true
 	s.mu.Unlock()
 
-	for _, proc := range allProcs {
-		stopErr := s.process.Stop(ctx, proc)
+	for _, t := range all {
+		stopErr := s.process.Stop(ctx, t.proc)
 		if stopErr != nil {
 			s.logger.WarnContext(ctx, "failed to stop runner during shutdown",
-				logging.KeyRunner, proc.Name,
+				logging.KeyRunner, t.proc.Name,
 				logging.KeyError, stopErr,
 			)
 		}
-		cleanupErr := s.process.Cleanup(proc)
+		cleanupErr := s.process.Cleanup(t.proc)
+		s.releaseLease(t.name)
 		if cleanupErr != nil {
 			s.logger.WarnContext(ctx, "failed to cleanup runner during shutdown",
-				logging.KeyRunner, proc.Name,
+				logging.KeyRunner, t.proc.Name,
 				logging.KeyError, cleanupErr,
 			)
 		}
-		if logsErr := s.logMgr.RemoveRunnerLogs(s.groupName, proc.Name); logsErr != nil {
+		if logsErr := s.logMgr.RemoveRunnerLogs(s.groupName, t.proc.Name); logsErr != nil {
 			s.logger.WarnContext(ctx, "failed to remove runner log dir during shutdown",
-				logging.KeyRunner, proc.Name,
+				logging.KeyRunner, t.proc.Name,
 				logging.KeyError, logsErr,
 			)
 		}

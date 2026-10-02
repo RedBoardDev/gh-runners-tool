@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/RedBoardDev/gh-runners-tool/v2/internal/cgroup"
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/logging"
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/model"
 )
@@ -34,18 +35,30 @@ type Process struct {
 	// scaler mutex on the idle→busy transition.
 	BusySince time.Time
 	cmd       *exec.Cmd
+	done      chan struct{}
+	waitErr   error
+}
+
+func (p *Process) Exited() <-chan struct{} {
+	return p.done
 }
 
 type ProcessManager struct {
-	workdirBase string
-	logger      *slog.Logger
+	workdirBase  string
+	logger       *slog.Logger
+	cgroups      cgroupManager
+	cgroupLimits map[string]cgroup.Limits
 }
 
-func NewProcessManager(workdirBase string, logger *slog.Logger) *ProcessManager {
-	return &ProcessManager{
+func NewProcessManager(workdirBase string, logger *slog.Logger, opts ...ProcessOption) *ProcessManager {
+	m := &ProcessManager{
 		workdirBase: workdirBase,
 		logger:      logger,
 	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
 }
 
 func (m *ProcessManager) Prepare(ctx context.Context, instance *model.RunnerInstance, cachedDir string) (string, error) {
@@ -85,7 +98,14 @@ func (m *ProcessManager) Start(ctx context.Context, instance *model.RunnerInstan
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 
+	releaseCgroup, err := m.placeInCgroup(cmd, instance.Name, instance.Group)
+	if err != nil {
+		return nil, err
+	}
+	defer releaseCgroup()
+
 	if err := cmd.Start(); err != nil {
+		m.destroyCgroup(instance.Name, instance.Group)
 		return nil, fmt.Errorf("start runner %s: %w", instance.Name, err)
 	}
 
@@ -97,14 +117,20 @@ func (m *ProcessManager) Start(ctx context.Context, instance *model.RunnerInstan
 
 	m.logger.InfoContext(ctx, "runner started", logging.KeyRunner, instance.Name, logging.KeyPID, pid)
 
-	return &Process{
+	proc := &Process{
 		Name:      instance.Name,
 		Group:     instance.Group,
 		WorkDir:   workdir,
 		PID:       pid,
 		StartedAt: time.Now(),
 		cmd:       cmd,
-	}, nil
+		done:      make(chan struct{}),
+	}
+	go func() {
+		proc.waitErr = cmd.Wait()
+		close(proc.done)
+	}()
+	return proc, nil
 }
 
 // runnerEnv builds the child environment from parent, overriding the keys that
@@ -143,7 +169,7 @@ func runnerEnv(parent []string, jitConfig, runnerHome, runnerTmp string) []strin
 }
 
 func (m *ProcessManager) Stop(ctx context.Context, proc *Process) error {
-	if proc.cmd == nil || proc.cmd.Process == nil {
+	if proc.cmd == nil || proc.cmd.Process == nil || proc.done == nil {
 		return nil
 	}
 
@@ -156,32 +182,28 @@ func (m *ProcessManager) Stop(ctx context.Context, proc *Process) error {
 		return fmt.Errorf("send SIGTERM to runner %s (pid %d): %w", proc.Name, proc.PID, err)
 	}
 
-	done := make(chan error, 1)
-	go func() {
-		done <- proc.cmd.Wait()
-	}()
-
 	select {
-	case err := <-done:
-		if isExpectedExit(err) {
-			return nil
-		}
-		return err
+	case <-proc.done:
+		return exitResult(proc.waitErr)
 	case <-time.After(stopGracePeriod):
 		m.logger.WarnContext(ctx, "runner did not exit after SIGTERM, sending SIGKILL", logging.KeyRunner, proc.Name, logging.KeyPID, proc.PID)
 		if err := proc.cmd.Process.Kill(); err != nil {
 			return fmt.Errorf("kill runner %s (pid %d): %w", proc.Name, proc.PID, err)
 		}
 		select {
-		case err := <-done:
-			if isExpectedExit(err) {
-				return nil
-			}
-			return err
+		case <-proc.done:
+			return exitResult(proc.waitErr)
 		case <-time.After(killTimeout):
 			return fmt.Errorf("runner %s (pid %d) did not exit after SIGKILL within %s", proc.Name, proc.PID, killTimeout)
 		}
 	}
+}
+
+func exitResult(err error) error {
+	if isExpectedExit(err) {
+		return nil
+	}
+	return err
 }
 
 func isProcessFinished(err error) bool {
@@ -197,6 +219,8 @@ func isExpectedExit(err error) bool {
 }
 
 func (m *ProcessManager) Cleanup(proc *Process) error {
+	m.destroyCgroup(proc.Name, proc.Group)
+
 	// Job containers bind-mount the workdir: remove them (and their networks)
 	// before the workdir, or they leak when a runner is killed mid-job.
 	m.CleanupJobContainers(context.Background(), proc.WorkDir)

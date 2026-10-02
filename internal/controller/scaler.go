@@ -9,6 +9,7 @@ import (
 
 	"io"
 
+	"github.com/RedBoardDev/gh-runners-tool/v2/internal/capacity"
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/logging"
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/model"
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/runner"
@@ -34,9 +35,19 @@ type MacOSScaler struct {
 	cachedDir  string
 	logger     *slog.Logger
 
-	mu   sync.Mutex
-	idle map[string]*runner.Process
-	busy map[string]*runner.Process
+	budget capacityBudget
+
+	reconcileMu sync.Mutex
+	lastCount   int
+	hasCount    bool
+
+	mu      sync.Mutex
+	idle    map[string]*runner.Process
+	busy    map[string]*runner.Process
+	stopped bool
+
+	leaseMu sync.Mutex
+	leases  map[string]*capacity.Lease
 }
 
 func NewMacOSScaler(
@@ -50,8 +61,9 @@ func NewMacOSScaler(
 	minRunners int,
 	cachedDir string,
 	logger *slog.Logger,
+	opts ...ScalerOption,
 ) *MacOSScaler {
-	return &MacOSScaler{
+	s := &MacOSScaler{
 		client:     client,
 		process:    process,
 		logMgr:     logMgr,
@@ -65,28 +77,17 @@ func NewMacOSScaler(
 		idle:       make(map[string]*runner.Process),
 		busy:       make(map[string]*runner.Process),
 	}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
 
 func (s *MacOSScaler) HandleDesiredRunnerCount(ctx context.Context, count int) (int, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.reconcileMu.Lock()
+	defer s.reconcileMu.Unlock()
 
-	target := s.minRunners + count
-	if target > s.maxRunners {
-		target = s.maxRunners
-	}
-
-	current := len(s.idle) + len(s.busy)
-	for i := 0; i < target-current; i++ {
-		if err := s.startRunner(ctx); err != nil {
-			s.logger.ErrorContext(ctx, "failed to start runner",
-				logging.KeyGroup, s.groupName,
-				logging.KeyError, err,
-			)
-		}
-	}
-
-	return len(s.idle) + len(s.busy), nil
+	return s.reconcile(ctx, count), nil
 }
 
 func (s *MacOSScaler) HandleJobStarted(ctx context.Context, jobInfo *scaleset.JobStarted) error {
@@ -143,6 +144,7 @@ func (s *MacOSScaler) HandleJobCompleted(ctx context.Context, jobInfo *scaleset.
 			)
 		}
 		cleanupErr := s.process.Cleanup(proc)
+		s.releaseLease(jobInfo.RunnerName)
 		if cleanupErr != nil {
 			s.logger.WarnContext(ctx, "failed to cleanup runner",
 				logging.KeyRunner, jobInfo.RunnerName,

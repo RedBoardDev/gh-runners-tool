@@ -91,11 +91,7 @@ func (c *GroupController) runGroupOnce(
 		}
 	}()
 
-	scaler := NewMacOSScaler(
-		c.client, c.process, c.logMgr, c.notifier,
-		ss.ID, group.Name, group.MaxRunners, group.MinRunners,
-		cachedDir, groupLogger,
-	)
+	scaler := c.scalerFor(group, ss.ID, cachedDir, groupLogger)
 	c.registerScaler(group.Name, scaler)
 
 	l, err := c.client.NewListener(session, ss.ID, group.MaxRunners)
@@ -114,6 +110,7 @@ func (c *GroupController) runGroupOnce(
 	c.unregisterScaler(group.Name)
 
 	if errors.Is(listenerErr, context.Canceled) {
+		c.forgetScaler(group.Name)
 		scaler.Shutdown(ctx)
 		cleanupCtx := context.WithoutCancel(ctx)
 		deleteErr := c.client.DeleteScaleSet(cleanupCtx, ss.ID)

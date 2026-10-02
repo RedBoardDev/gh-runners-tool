@@ -42,9 +42,11 @@ type GroupController struct {
 	groups    []config.GroupConfig
 	globalCfg ControllerConfig
 	logger    *slog.Logger
+	budget    groupCapacity
 
-	mu      sync.Mutex
-	scalers map[string]*MacOSScaler
+	mu       sync.Mutex
+	scalers  map[string]*MacOSScaler
+	retained map[string]*MacOSScaler
 }
 
 func New(
@@ -56,8 +58,9 @@ func New(
 	groups []config.GroupConfig,
 	globalCfg ControllerConfig,
 	logger *slog.Logger,
+	opts ...Option,
 ) *GroupController {
-	return &GroupController{
+	c := &GroupController{
 		client:    client,
 		binary:    binary,
 		process:   process,
@@ -67,7 +70,12 @@ func New(
 		globalCfg: globalCfg,
 		logger:    logger,
 		scalers:   make(map[string]*MacOSScaler),
+		retained:  make(map[string]*MacOSScaler),
 	}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c
 }
 
 func (c *GroupController) Run(ctx context.Context) error {
@@ -103,7 +111,10 @@ func (c *GroupController) Run(ctx context.Context) error {
 
 func (c *GroupController) Shutdown(ctx context.Context) {
 	c.mu.Lock()
-	scalers := make(map[string]*MacOSScaler, len(c.scalers))
+	scalers := make(map[string]*MacOSScaler, len(c.scalers)+len(c.retained))
+	for k, v := range c.retained {
+		scalers[k] = v
+	}
 	for k, v := range c.scalers {
 		scalers[k] = v
 	}
@@ -156,12 +167,20 @@ func (c *GroupController) KillIdleRunner(ctx context.Context, group, runnerName 
 
 func (c *GroupController) registerScaler(name string, s *MacOSScaler) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	c.scalers[name] = s
+	c.mu.Unlock()
+
+	if c.budget != nil {
+		c.budget.Register(name, s)
+	}
 }
 
 func (c *GroupController) unregisterScaler(name string) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	delete(c.scalers, name)
+	c.mu.Unlock()
+
+	if c.budget != nil {
+		c.budget.Unregister(name)
+	}
 }

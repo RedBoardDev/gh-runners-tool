@@ -100,7 +100,8 @@ func runStart(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Groups:  %d", len(cfg.Groups))
 	if len(cfg.Groups) > 0 {
 		fmt.Print(" (")
-		for i, g := range cfg.Groups {
+		for i := range cfg.Groups {
+			g := &cfg.Groups[i]
 			if i > 0 {
 				fmt.Print(", ")
 			}

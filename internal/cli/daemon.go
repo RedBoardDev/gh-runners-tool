@@ -10,6 +10,7 @@ import (
 
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/api"
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/auth"
+	"github.com/RedBoardDev/gh-runners-tool/v2/internal/capacity"
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/config"
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/controller"
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/github"
@@ -22,12 +23,13 @@ import (
 )
 
 type daemon struct {
-	ctrl   *controller.GroupController
-	health *health.Monitor
-	api    *api.Server
-	logMgr *logging.LogManager
-	cfg    *config.Config
-	logger *slog.Logger
+	ctrl     *controller.GroupController
+	health   *health.Monitor
+	api      *api.Server
+	capacity *capacity.Allocator
+	logMgr   *logging.LogManager
+	cfg      *config.Config
+	logger   *slog.Logger
 }
 
 func buildDaemon(cfg *config.Config, creds *auth.Credentials, githubURL string) (*daemon, error) {
@@ -58,8 +60,14 @@ func buildDaemon(cfg *config.Config, creds *auth.Credentials, githubURL string) 
 		return nil, fmt.Errorf("create github client: %w", err)
 	}
 
+	host, err := buildHostLimits(cfg, logger)
+	if err != nil {
+		logMgr.Close()
+		return nil, err
+	}
+
 	binaryMgr := runner.NewBinaryManager(cfg.Runner.CacheDir, logger)
-	processMgr := runner.NewProcessManager(cfg.Runner.WorkdirBase, logger)
+	processMgr := runner.NewProcessManager(cfg.Runner.WorkdirBase, logger, host.process...)
 
 	if err := processMgr.CleanupStale(context.Background()); err != nil {
 		logger.Warn("stale runner cleanup failed", logging.KeyError, err)
@@ -74,7 +82,7 @@ func buildDaemon(cfg *config.Config, creds *auth.Credentials, githubURL string) 
 		cfg.Groups, controller.ControllerConfig{
 			RunnerVersion: cfg.Runner.Version,
 			RunnerGroupID: cfg.GitHub.RunnerGroupID,
-		}, logger,
+		}, logger, host.controller...,
 	)
 
 	var minDiskSpace int64
@@ -92,17 +100,18 @@ func buildDaemon(cfg *config.Config, creds *auth.Credentials, githubURL string) 
 		FailureCooldown:        cfg.Health.FailureCooldown.Duration,
 		MinDiskSpace:           minDiskSpace,
 		GroupMinRunners:        buildGroupMinRunners(cfg),
-	}, notifSvc, ctrl, reporters, ctrl, logger)
+	}, notifSvc, ctrl, reporters, ctrl, logger, host.health...)
 
-	apiServer := api.NewServer(cfg.Daemon.StateDir, ctrl, healthMon, logger)
+	apiServer := api.NewServer(cfg.Daemon.StateDir, ctrl, healthMon, logger, host.api...)
 
 	return &daemon{
-		ctrl:   ctrl,
-		health: healthMon,
-		api:    apiServer,
-		logMgr: logMgr,
-		cfg:    cfg,
-		logger: logger,
+		ctrl:     ctrl,
+		health:   healthMon,
+		api:      apiServer,
+		capacity: host.budget,
+		logMgr:   logMgr,
+		cfg:      cfg,
+		logger:   logger,
 	}, nil
 }
 
@@ -182,8 +191,8 @@ func removePIDFile(path string) {
 
 func buildGroupMinRunners(cfg *config.Config) map[string]int {
 	m := make(map[string]int, len(cfg.Groups))
-	for _, g := range cfg.Groups {
-		m[g.Name] = g.MinRunners
+	for i := range cfg.Groups {
+		m[cfg.Groups[i].Name] = cfg.Groups[i].MinRunners
 	}
 	return m
 }

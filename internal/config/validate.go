@@ -36,7 +36,8 @@ func validate(cfg *Config) error {
 
 	seenNames := make(map[string]bool, len(cfg.Groups))
 
-	for i, g := range cfg.Groups {
+	for i := range cfg.Groups {
+		g := &cfg.Groups[i]
 		prefix := fmt.Sprintf("groups[%d]", i)
 
 		switch {
@@ -115,6 +116,9 @@ func validate(cfg *Config) error {
 	default:
 		errs = append(errs, fmt.Errorf("logging.format must be one of: text, json; got %q", cfg.Logging.Format))
 	}
+
+	errs = append(errs, validateCapacity(cfg)...)
+	errs = append(errs, validateResources(cfg)...)
 
 	if len(errs) > 0 {
 		return errors.Join(errs...)

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -32,6 +33,8 @@ func Load(path string) (*Config, error) {
 	if err := validate(cfg); err != nil {
 		return nil, fmt.Errorf("validate config: %w", err)
 	}
+
+	cfg.Warnings = warnings(cfg, runtime.GOOS)
 
 	return cfg, nil
 }
@@ -142,7 +145,8 @@ func resolveUptimeKumaGroupTokens(cfg *Config) {
 	if cfg.Monitoring.UptimeKuma.GroupTokens == nil {
 		cfg.Monitoring.UptimeKuma.GroupTokens = make(map[string]string, len(cfg.Groups))
 	}
-	for _, g := range cfg.Groups {
+	for i := range cfg.Groups {
+		g := &cfg.Groups[i]
 		envKey := "GHR_UPTIME_KUMA_TOKEN_" + strings.ToUpper(strings.ReplaceAll(g.Name, "-", "_"))
 		if v := os.Getenv(envKey); v != "" {
 			cfg.Monitoring.UptimeKuma.GroupTokens[g.Name] = v
