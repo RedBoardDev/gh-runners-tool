@@ -85,6 +85,14 @@ func runDaemonGroup(d *daemon) error {
 		)
 	}
 
+	if d.capacity != nil {
+		ctx, cancel := context.WithCancel(context.Background())
+		g.Add(
+			safeActor(d.logger, "capacity", func() error { return d.capacity.Run(ctx) }),
+			func(error) { cancel() },
+		)
+	}
+
 	{
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(

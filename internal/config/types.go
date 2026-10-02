@@ -8,12 +8,15 @@ import (
 type Config struct {
 	GitHub        GitHubConfig        `yaml:"github"`
 	Runner        RunnerConfig        `yaml:"runner"`
+	Capacity      *ResourceAmount     `yaml:"capacity,omitempty"`
 	Groups        []GroupConfig       `yaml:"groups"`
 	Health        HealthConfig        `yaml:"health"`
 	Logging       LoggingConfig       `yaml:"logging"`
 	Notifications NotificationsConfig `yaml:"notifications"`
 	Monitoring    MonitoringConfig    `yaml:"monitoring"`
 	Daemon        DaemonConfig        `yaml:"daemon"`
+
+	Warnings []string `yaml:"-"`
 }
 
 type GitHubConfig struct {
@@ -36,6 +39,9 @@ type GroupConfig struct {
 	RunnerGroup string             `yaml:"runner_group"`
 	Version     string             `yaml:"version"`
 	Health      *GroupHealthConfig `yaml:"health,omitempty"`
+	Priority    int                `yaml:"priority"`
+	Reserve     ResourceAmount     `yaml:"reserve"`
+	Resources   ResourcesConfig    `yaml:"resources"`
 }
 
 type GroupHealthConfig struct {

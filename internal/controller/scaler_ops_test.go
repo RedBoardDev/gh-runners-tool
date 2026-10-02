@@ -75,7 +75,7 @@ func TestStartRunner_DeregistersOnPrepareFailure(t *testing.T) {
 		busy:      make(map[string]*runner.Process),
 	}
 
-	if err := s.startRunner(context.Background()); err == nil {
+	if err := s.startRunner(context.Background(), nil); err == nil {
 		t.Fatal("expected error when prepare fails")
 	}
 
@@ -99,7 +99,7 @@ func TestStartRunner_DeregistersOnStartFailure(t *testing.T) {
 		busy:      make(map[string]*runner.Process),
 	}
 
-	if err := s.startRunner(context.Background()); err == nil {
+	if err := s.startRunner(context.Background(), nil); err == nil {
 		t.Fatal("expected error when start fails")
 	}
 
@@ -121,7 +121,7 @@ func TestStartRunner_NoDeregisterOnSuccess(t *testing.T) {
 		busy:      make(map[string]*runner.Process),
 	}
 
-	if err := s.startRunner(context.Background()); err != nil {
+	if err := s.startRunner(context.Background(), nil); err != nil {
 		t.Fatalf("startRunner: %v", err)
 	}
 

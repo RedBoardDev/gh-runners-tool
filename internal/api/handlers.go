@@ -5,12 +5,14 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/RedBoardDev/gh-runners-tool/v2/internal/capacity"
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/model"
 )
 
 type statusResponse struct {
-	Groups map[string][]model.RunnerSnapshot `json:"groups"`
-	Health healthResponse                    `json:"health"`
+	Groups   map[string][]model.RunnerSnapshot `json:"groups"`
+	Health   healthResponse                    `json:"health"`
+	Capacity *capacity.Status                  `json:"capacity,omitempty"`
 }
 
 type healthResponse struct {
@@ -35,6 +37,10 @@ func (s *Server) handleStatus(w http.ResponseWriter, _ *http.Request) {
 			LastCheck: hs.LastCheck,
 			Issues:    hs.Issues,
 		},
+	}
+	if s.capacity != nil {
+		status := s.capacity.Status()
+		resp.Capacity = &status
 	}
 
 	writeJSON(w, resp)

@@ -29,6 +29,18 @@ type RunnerKiller interface {
 	KillIdleRunner(ctx context.Context, group string, runner string) error
 }
 
+type CapacityWaiter interface {
+	WaitingRunners() map[string]int
+}
+
+type MonitorOption func(*Monitor)
+
+func WithCapacity(waiter CapacityWaiter) MonitorOption {
+	return func(m *Monitor) {
+		m.capacity = waiter
+	}
+}
+
 type MonitorConfig struct {
 	Enabled                bool
 	CheckInterval          time.Duration
@@ -48,6 +60,7 @@ type Monitor struct {
 	runners   RunnerStateProvider
 	reporters []Reporter
 	killer    RunnerKiller
+	capacity  CapacityWaiter
 
 	mu        sync.RWMutex
 	lastCheck time.Time
@@ -62,8 +75,9 @@ func NewMonitor(
 	reporters []Reporter,
 	killer RunnerKiller,
 	logger *slog.Logger,
+	opts ...MonitorOption,
 ) *Monitor {
-	return &Monitor{
+	m := &Monitor{
 		cfg:       cfg,
 		logger:    logger,
 		notifier:  notifier,
@@ -72,6 +86,17 @@ func NewMonitor(
 		killer:    killer,
 		groups:    make(map[string]*groupState),
 	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+func (m *Monitor) waitingRunners() map[string]int {
+	if m.capacity == nil {
+		return nil
+	}
+	return m.capacity.WaitingRunners()
 }
 
 func (m *Monitor) Run(ctx context.Context) error {

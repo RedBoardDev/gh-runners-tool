@@ -208,7 +208,7 @@ func TestCheckGroupDivergence(t *testing.T) {
 				degradedSince:    tt.degradedSince,
 			}
 
-			m.checkGroupDivergence("test-group", tt.actualCount, gs)
+			m.checkGroupDivergence("test-group", tt.actualCount, 0, gs)
 
 			if len(m.issues) != tt.wantIssues {
 				t.Errorf("expected %d issues, got %d", tt.wantIssues, len(m.issues))

@@ -9,8 +9,9 @@ import (
 )
 
 type statusResponse struct {
-	Groups map[string][]statusRunner `json:"groups"`
-	Health statusHealth              `json:"health"`
+	Groups   map[string][]statusRunner `json:"groups"`
+	Health   statusHealth              `json:"health"`
+	Capacity *statusCapacity           `json:"capacity,omitempty"`
 }
 
 type statusRunner struct {
@@ -82,6 +83,7 @@ func displayStatus(data []byte) error {
 
 	renderServiceSection(pid, "")
 	renderGroupsTable(status.Groups)
+	renderCapacitySection(status.Capacity)
 	renderRunnersTable(status.Groups)
 	renderHealthSection(status.Health)
 

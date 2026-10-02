@@ -39,6 +39,18 @@ func TestParseByteSize(t *testing.T) {
 		{name: "1.5GB", input: "1.5GB", want: 1_500_000_000},
 		{name: "0.5MB", input: "0.5MB", want: 500_000},
 
+		// Binary suffixes (1024-based), matching systemd and Docker.
+		{name: "1K", input: "1K", want: 1024},
+		{name: "1M", input: "1M", want: 1 << 20},
+		{name: "12G", input: "12G", want: 12 << 30},
+		{name: "lowercase g", input: "48g", want: 48 << 30},
+		{name: "1T", input: "1T", want: 1 << 40},
+		{name: "1KiB", input: "1KiB", want: 1024},
+		{name: "512MiB", input: "512MiB", want: 512 << 20},
+		{name: "2GiB", input: "2GiB", want: 2 << 30},
+		{name: "1TiB", input: "1TiB", want: 1 << 40},
+		{name: "fractional G", input: "1.5G", want: 3 << 29},
+
 		// Whitespace handling.
 		{name: "leading/trailing spaces", input: "  100MB  ", want: 100_000_000},
 
@@ -49,6 +61,11 @@ func TestParseByteSize(t *testing.T) {
 		{name: "negative raw", input: "-100", wantErr: true},
 		{name: "suffix only KB", input: "KB", wantErr: true},
 		{name: "suffix only B", input: "B", wantErr: true},
+		{name: "suffix only G", input: "G", wantErr: true},
+		{name: "suffix only GiB", input: "GiB", wantErr: true},
+		{name: "negative G", input: "-1G", wantErr: true},
+		{name: "overflowing value", input: "99999999999TB", wantErr: true},
+		{name: "infinite value", input: "infG", wantErr: true},
 	}
 
 	for _, tt := range tests {

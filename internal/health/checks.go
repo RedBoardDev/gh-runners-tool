@@ -22,13 +22,14 @@ func (m *Monitor) runChecks(ctx context.Context) {
 
 	groupActuals := make(map[string]int, len(snapshots))
 	groupDesireds := make(map[string]int, len(snapshots))
+	waiting := m.waitingRunners()
 
 	for group, snaps := range snapshots {
 		m.checkRunnerLiveness(ctx, group, snaps)
 		m.checkRunnerTimeouts(ctx, group, snaps)
 		m.checkIdleTimeouts(ctx, group, snaps)
 		gs := m.getOrCreateGroup(group)
-		m.checkGroupDivergence(group, len(snaps), gs)
+		m.checkGroupDivergence(group, len(snaps), waiting[group], gs)
 		m.checkConsecutiveFailures(group, gs)
 		totalActual += len(snaps)
 		totalDesired += gs.lastDesiredCount
@@ -79,6 +80,10 @@ func dispatchHealthReports(ctx context.Context, reporters []Reporter, notifier N
 		}
 	}
 	for _, issue := range p.issues {
+		// Re-notifying an info issue on every tick floods the webhook; info is status-only.
+		if issue.Level == model.LevelInfo {
+			continue
+		}
 		notifier.Notify(ctx, &model.Event{
 			Type:      issue.Type,
 			Level:     issue.Level,
@@ -206,7 +211,9 @@ func (m *Monitor) checkIdleTimeouts(ctx context.Context, group string, snapshots
 	}
 }
 
-func (m *Monitor) checkGroupDivergence(group string, actualCount int, gs *groupState) {
+func (m *Monitor) checkGroupDivergence(group string, actualCount, deferred int, gs *groupState) {
+	m.reportWaitingForCapacity(group, deferred)
+
 	if m.cfg.DivergenceTimeout <= 0 {
 		return
 	}
@@ -214,7 +221,8 @@ func (m *Monitor) checkGroupDivergence(group string, actualCount int, gs *groupS
 		return
 	}
 
-	if actualCount == gs.lastDesiredCount {
+	desired := gs.lastDesiredCount - deferred
+	if desired <= 0 || actualCount == desired {
 		gs.degradedSince = nil
 		return
 	}
@@ -233,7 +241,7 @@ func (m *Monitor) checkGroupDivergence(group string, actualCount int, gs *groupS
 		Level:      model.LevelWarning,
 		Type:       model.EventHealthGroupDegraded,
 		Group:      group,
-		Message:    fmt.Sprintf("group %s has %d runners but %d desired for %s", group, actualCount, gs.lastDesiredCount, now.Sub(*gs.degradedSince).Round(time.Second)),
+		Message:    fmt.Sprintf("group %s has %d runners but %d desired for %s", group, actualCount, desired, now.Sub(*gs.degradedSince).Round(time.Second)),
 		DetectedAt: now,
 	})
 }

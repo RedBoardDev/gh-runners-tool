@@ -25,6 +25,8 @@ internal/cli/          → Cobra commands (thin)
 internal/auth/         → credentials (login, load, save)
 internal/config/       → YAML + env loading
 internal/controller/   → scale set orchestration + Scaler
+internal/capacity/     → host-wide memory/CPU budget + group priorities
+internal/cgroup/       → per-runner cgroup v2 limits (Linux)
 internal/runner/       → binary download + process management
 internal/github/       → scaleset SDK adapter
 internal/health/       → health monitoring

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -32,6 +33,8 @@ func Load(path string) (*Config, error) {
 	if err := validate(cfg); err != nil {
 		return nil, fmt.Errorf("validate config: %w", err)
 	}
+
+	cfg.Warnings = warnings(cfg, runtime.GOOS)
 
 	return cfg, nil
 }

@@ -34,6 +34,8 @@ const (
 	EventHealthDiskLow           = "health.disk_low"
 	EventHealthOrphanKilled      = "health.orphan_killed"
 	EventHealthIdleTimeout       = "health.idle_timeout"
+
+	EventHealthGroupWaitingCapacity = "health.group_waiting_capacity"
 )
 
 type Event struct {
