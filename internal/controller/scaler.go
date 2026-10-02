@@ -36,6 +36,7 @@ type MacOSScaler struct {
 	logger     *slog.Logger
 
 	budget capacityBudget
+	stats  groupStatsSink
 
 	reconcileMu sync.Mutex
 	lastCount   int

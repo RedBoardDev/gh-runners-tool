@@ -14,7 +14,17 @@ type capacityBudget interface {
 	Acquire(group string, want int) capacity.Grant
 }
 
+type groupStatsSink interface {
+	UpdateGroupStats(group string, desired int)
+}
+
 type ScalerOption func(*MacOSScaler)
+
+func WithGroupStats(sink groupStatsSink) ScalerOption {
+	return func(s *MacOSScaler) {
+		s.stats = sink
+	}
+}
 
 func WithCapacityBudget(budget capacityBudget) ScalerOption {
 	return func(s *MacOSScaler) {
@@ -44,6 +54,11 @@ func (s *MacOSScaler) reconcile(ctx context.Context, count int) int {
 	target := s.minRunners + count
 	if target > s.maxRunners {
 		target = s.maxRunners
+	}
+
+	// Calling this after s.mu is taken inverts the lock order with the health monitor, which snapshots scalers while holding its own lock.
+	if s.stats != nil {
+		s.stats.UpdateGroupStats(s.groupName, target)
 	}
 
 	if s.budget != nil {

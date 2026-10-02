@@ -21,6 +21,12 @@ func WithCapacity(budget groupCapacity) Option {
 	}
 }
 
+func (c *GroupController) SetGroupStats(sink groupStatsSink) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.stats = sink
+}
+
 // Building a fresh scaler on each listener restart would orphan the running
 // runners and leak their leases, shrinking the budget for good.
 func (c *GroupController) scalerFor(group *config.GroupConfig, scaleSetID int, cachedDir string, logger *slog.Logger) *MacOSScaler {
@@ -34,11 +40,16 @@ func (c *GroupController) scalerFor(group *config.GroupConfig, scaleSetID int, c
 		}
 	}
 
+	c.mu.Lock()
+	stats := c.stats
+	c.mu.Unlock()
+
 	scaler := NewMacOSScaler(
 		c.client, c.process, c.logMgr, c.notifier,
 		scaleSetID, group.Name, group.MaxRunners, group.MinRunners,
 		cachedDir, logger,
 		WithCapacityBudget(c.budget),
+		WithGroupStats(stats),
 	)
 	if c.budget != nil {
 		c.mu.Lock()

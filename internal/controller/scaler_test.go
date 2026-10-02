@@ -249,3 +249,63 @@ func TestHandleJobCompleted_NotifiesEvent(t *testing.T) {
 		t.Fatalf("expected event type %q, got %q", model.EventRunnerFailed, n.events[0].Type)
 	}
 }
+
+type recordingStats struct {
+	calls []statsCall
+}
+
+type statsCall struct {
+	group   string
+	desired int
+}
+
+func (r *recordingStats) UpdateGroupStats(group string, desired int) {
+	r.calls = append(r.calls, statsCall{group: group, desired: desired})
+}
+
+func TestReconcile_ReportsDesiredCountToStats(t *testing.T) {
+	tests := []struct {
+		name        string
+		minRunners  int
+		maxRunners  int
+		counts      []int
+		wantDesired []int
+	}{
+		{"count only", 0, 5, []int{2}, []int{2}},
+		{"min runners added", 1, 5, []int{2}, []int{3}},
+		{"capped by max", 0, 5, []int{10}, []int{5}},
+		{"idle group keeps its minimum", 2, 5, []int{0}, []int{2}},
+		{"every reconcile reports", 0, 5, []int{3, 1}, []int{3, 1}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stats := &recordingStats{}
+			s := newTestScaler(func(scaler *MacOSScaler) {
+				scaler.minRunners = tt.minRunners
+				scaler.maxRunners = tt.maxRunners
+				scaler.stats = stats
+				scaler.idle = map[string]*runner.Process{}
+				for i := 0; i < tt.maxRunners; i++ {
+					name := string(rune('a' + i))
+					scaler.idle[name] = &runner.Process{Name: name, Group: "test-group"}
+				}
+			})
+
+			for _, count := range tt.counts {
+				if _, err := s.HandleDesiredRunnerCount(context.Background(), count); err != nil {
+					t.Fatalf("HandleDesiredRunnerCount: %v", err)
+				}
+			}
+
+			if len(stats.calls) != len(tt.wantDesired) {
+				t.Fatalf("stats calls = %d, want %d", len(stats.calls), len(tt.wantDesired))
+			}
+			for i, want := range tt.wantDesired {
+				if got := stats.calls[i]; got.group != "test-group" || got.desired != want {
+					t.Errorf("call %d = %+v, want group test-group desired %d", i, got, want)
+				}
+			}
+		})
+	}
+}
