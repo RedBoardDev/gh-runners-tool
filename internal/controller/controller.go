@@ -43,6 +43,7 @@ type GroupController struct {
 	globalCfg ControllerConfig
 	logger    *slog.Logger
 	budget    groupCapacity
+	stats     groupStatsSink
 
 	mu       sync.Mutex
 	scalers  map[string]*MacOSScaler

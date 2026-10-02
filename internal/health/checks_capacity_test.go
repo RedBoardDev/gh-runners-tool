@@ -175,3 +175,56 @@ func TestDispatchHealthReports_InfoIssuesAreNotNotified(t *testing.T) {
 		t.Fatalf("notified events = %+v, want only the degraded warning", events)
 	}
 }
+
+func TestRunChecks_DivergenceFedByGroupStats(t *testing.T) {
+	tests := []struct {
+		name         string
+		desired      int
+		actual       int
+		deferred     int
+		timeoutElaps bool
+		wantDegraded int
+		wantMessage  string
+	}{
+		{name: "deficit past the timeout is reported", desired: 3, actual: 1, timeoutElaps: true, wantDegraded: 1, wantMessage: "1 runners but 3 desired"},
+		{name: "deficit within the timeout is not reported", desired: 3, actual: 1},
+		{name: "capacity-deferred deficit is not reported", desired: 3, actual: 1, deferred: 2, timeoutElaps: true},
+		{name: "partially deferred deficit is reported for the rest", desired: 4, actual: 1, deferred: 1, timeoutElaps: true, wantDegraded: 1, wantMessage: "1 runners but 3 desired"},
+		{name: "matching count is not reported", desired: 1, actual: 1, timeoutElaps: true},
+		{name: "no desired count reported yet", desired: 0, actual: 1, timeoutElaps: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			snaps := make([]model.RunnerSnapshot, tt.actual)
+			for i := range snaps {
+				snaps[i] = model.RunnerSnapshot{Name: "r", State: "idle", StartedAt: time.Now()}
+			}
+			m := NewMonitor(
+				MonitorConfig{Enabled: true, CheckInterval: time.Second, DivergenceTimeout: time.Minute},
+				&noopNotifier{}, &fakeRunnerState{snapshots: map[string][]model.RunnerSnapshot{"group-a": snaps}},
+				nil, nil, noopLogger(),
+				WithCapacity(fakeCapacityWaiter{waiting: map[string]int{"group-a": tt.deferred}}),
+			)
+			m.UpdateGroupStats("group-a", tt.desired)
+
+			m.runChecks(context.Background())
+			if tt.timeoutElaps {
+				m.mu.Lock()
+				if gs := m.groups["group-a"]; gs.degradedSince != nil {
+					gs.degradedSince = timePtr(time.Now().Add(-time.Hour))
+				}
+				m.mu.Unlock()
+			}
+			m.runChecks(context.Background())
+
+			degraded := issuesOfType(m.Status().Issues, model.EventHealthGroupDegraded)
+			if len(degraded) != tt.wantDegraded {
+				t.Fatalf("degraded issues = %d, want %d (%+v)", len(degraded), tt.wantDegraded, degraded)
+			}
+			if tt.wantMessage != "" && !strings.Contains(degraded[0].Message, tt.wantMessage) {
+				t.Errorf("message %q lacks %q", degraded[0].Message, tt.wantMessage)
+			}
+		})
+	}
+}

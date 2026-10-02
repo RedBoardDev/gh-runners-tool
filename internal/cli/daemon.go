@@ -102,6 +102,8 @@ func buildDaemon(cfg *config.Config, creds *auth.Credentials, githubURL string) 
 		GroupMinRunners:        buildGroupMinRunners(cfg),
 	}, notifSvc, ctrl, reporters, ctrl, logger, host.health...)
 
+	ctrl.SetGroupStats(healthMon)
+
 	apiServer := api.NewServer(cfg.Daemon.StateDir, ctrl, healthMon, logger, host.api...)
 
 	return &daemon{
