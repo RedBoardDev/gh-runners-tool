@@ -49,7 +49,8 @@ func needsCPUController(limits map[string]cgroup.Limits) bool {
 
 func cgroupLimits(cfg *config.Config) (map[string]cgroup.Limits, error) {
 	limits := make(map[string]cgroup.Limits)
-	for _, g := range cfg.Groups {
+	for i := range cfg.Groups {
+		g := &cfg.Groups[i]
 		if g.Resources.IsZero() {
 			continue
 		}

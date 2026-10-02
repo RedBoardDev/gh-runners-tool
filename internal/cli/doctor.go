@@ -105,7 +105,8 @@ func buildChecks() []doctor.Check {
 }
 
 func anyGroupHasCPUWeight(cfg *config.Config) bool {
-	for _, g := range cfg.Groups {
+	for i := range cfg.Groups {
+		g := &cfg.Groups[i]
 		if g.Resources.CPUWeight > 0 {
 			return true
 		}
@@ -114,7 +115,8 @@ func anyGroupHasCPUWeight(cfg *config.Config) bool {
 }
 
 func anyGroupHasResources(cfg *config.Config) bool {
-	for _, g := range cfg.Groups {
+	for i := range cfg.Groups {
+		g := &cfg.Groups[i]
 		if !g.Resources.IsZero() {
 			return true
 		}

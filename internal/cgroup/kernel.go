@@ -14,11 +14,10 @@ const (
 )
 
 func (m *Manager) requireCloneIntoCgroup() error {
-	data, err := os.ReadFile(filepath.Join(m.procRoot, "sys", "kernel", "osrelease"))
-	if err != nil {
+	release, ok := m.kernelRelease()
+	if !ok {
 		return nil
 	}
-	release := strings.TrimSpace(string(data))
 	major, minor, ok := parseKernelVersion(release)
 	if !ok {
 		return nil
@@ -45,4 +44,12 @@ func parseKernelVersion(release string) (major, minor int, ok bool) {
 		return 0, 0, false
 	}
 	return major, minor, true
+}
+
+func (m *Manager) kernelRelease() (string, bool) {
+	data, err := os.ReadFile(filepath.Join(m.procRoot, "sys", "kernel", "osrelease"))
+	if err != nil {
+		return "", false
+	}
+	return strings.TrimSpace(string(data)), true
 }

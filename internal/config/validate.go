@@ -36,7 +36,8 @@ func validate(cfg *Config) error {
 
 	seenNames := make(map[string]bool, len(cfg.Groups))
 
-	for i, g := range cfg.Groups {
+	for i := range cfg.Groups {
+		g := &cfg.Groups[i]
 		prefix := fmt.Sprintf("groups[%d]", i)
 
 		switch {

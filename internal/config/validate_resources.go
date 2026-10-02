@@ -5,14 +5,14 @@ import (
 )
 
 func validateResources(cfg *Config) []error {
-	var errs []error
-	for i, g := range cfg.Groups {
-		errs = append(errs, validateGroupResources(i, g)...)
+	errs := make([]error, 0, len(cfg.Groups))
+	for i := range cfg.Groups {
+		errs = append(errs, validateGroupResources(i, &cfg.Groups[i])...)
 	}
 	return errs
 }
 
-func validateGroupResources(index int, g GroupConfig) []error {
+func validateGroupResources(index int, g *GroupConfig) []error {
 	prefix := fmt.Sprintf("groups[%d] (%s): resources", index, g.Name)
 	var errs []error
 

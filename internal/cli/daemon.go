@@ -191,8 +191,8 @@ func removePIDFile(path string) {
 
 func buildGroupMinRunners(cfg *config.Config) map[string]int {
 	m := make(map[string]int, len(cfg.Groups))
-	for _, g := range cfg.Groups {
-		m[g.Name] = g.MinRunners
+	for i := range cfg.Groups {
+		m[cfg.Groups[i].Name] = cfg.Groups[i].MinRunners
 	}
 	return m
 }

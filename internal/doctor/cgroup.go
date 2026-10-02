@@ -36,7 +36,7 @@ func (c CgroupCheck) Run(_ context.Context) Result {
 	}
 	pid, running := daemonPID(c.PIDFile)
 	if !running {
-		return c.notRunningResult(res, mgr)
+		return c.notRunningResult(&res, mgr)
 	}
 
 	base, err := mgr.VerifyEnforcement(pid, c.NeedCPU)
@@ -54,18 +54,18 @@ func (c CgroupCheck) Run(_ context.Context) Result {
 	return res
 }
 
-func (c CgroupCheck) notRunningResult(res Result, mgr *cgroup.Manager) Result {
+func (c CgroupCheck) notRunningResult(res *Result, mgr *cgroup.Manager) Result {
 	if err := mgr.CheckUnified(); err != nil {
 		res.Status = StatusFail
 		res.Summary = "cgroup v2 is not available"
 		res.Details = []string{err.Error()}
 		res.Hint = "per-runner limits need a Linux host booted with the unified cgroup v2 hierarchy"
-		return res
+		return *res
 	}
 	res.Status = StatusWarn
 	res.Summary = "daemon not running: delegation can only be verified against the running daemon"
 	res.Hint = "start ghr, then rerun; the systemd unit needs Delegate=yes and OOMPolicy=continue"
-	return res
+	return *res
 }
 
 func daemonPID(pidFile string) (int, bool) {

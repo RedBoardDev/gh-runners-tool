@@ -27,7 +27,8 @@ func validateCapacity(cfg *Config) []error {
 
 	reserves := make([]resolvedAmount, len(cfg.Groups))
 	reserveOK := make([]bool, len(cfg.Groups))
-	for i, g := range cfg.Groups {
+	for i := range cfg.Groups {
+		g := &cfg.Groups[i]
 		resolved, err := resolveAmount(g.Reserve)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("groups[%d] (%s): reserve: %w", i, g.Name, err))
@@ -57,7 +58,8 @@ func validateCapacity(cfg *Config) []error {
 
 	var floor resolvedAmount
 	floorComplete := true
-	for i, g := range cfg.Groups {
+	for i := range cfg.Groups {
+		g := &cfg.Groups[i]
 		if !reserveOK[i] {
 			floorComplete = false
 			continue
@@ -73,7 +75,7 @@ func validateCapacity(cfg *Config) []error {
 	return errs
 }
 
-func reserveFitErrors(index int, g GroupConfig, reserve, total resolvedAmount) []error {
+func reserveFitErrors(index int, g *GroupConfig, reserve, total resolvedAmount) []error {
 	var errs []error
 	if total.memory > 0 && reserve.memory > total.memory {
 		errs = append(errs, fmt.Errorf("groups[%d] (%s): reserve.memory %q does not fit in capacity.memory",

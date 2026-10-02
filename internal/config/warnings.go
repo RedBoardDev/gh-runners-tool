@@ -4,7 +4,8 @@ import "fmt"
 
 func warnings(cfg *Config, goos string) []string {
 	var out []string
-	for i, g := range cfg.Groups {
+	for i := range cfg.Groups {
+		g := &cfg.Groups[i]
 		prefix := fmt.Sprintf("groups[%d] (%s)", i, g.Name)
 		if cfg.Capacity == nil && !g.Reserve.IsZero() {
 			out = append(out, prefix+": reserve is ignored because capacity is not set")

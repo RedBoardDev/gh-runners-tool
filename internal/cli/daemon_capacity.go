@@ -54,7 +54,8 @@ func buildCapacity(cfg *config.Config, logger *slog.Logger) (*capacity.Allocator
 	}
 
 	specs := make([]capacity.GroupSpec, 0, len(cfg.Groups))
-	for _, g := range cfg.Groups {
+	for i := range cfg.Groups {
+		g := &cfg.Groups[i]
 		reserve, err := toResources(g.Reserve)
 		if err != nil {
 			return nil, fmt.Errorf("group %q reserve: %w", g.Name, err)

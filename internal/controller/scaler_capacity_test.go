@@ -126,8 +126,9 @@ func (f *capacityFixture) handleCount(count int) int {
 }
 
 func (f *capacityFixture) runnerNames() []string {
-	var names []string
-	for _, snap := range f.scaler.Snapshots() {
+	snaps := f.scaler.Snapshots()
+	names := make([]string, 0, len(snaps))
+	for _, snap := range snaps {
 		names = append(names, snap.Name)
 	}
 	return names
