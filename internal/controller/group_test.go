@@ -89,3 +89,45 @@ func TestRemoveStaleRegistrations_RemovesOnlyThisHostsLeftoversInThisScaleSet(t 
 		t.Fatalf("removed runner IDs = %v, want %v: only this host's leftovers in this scale set, never another host's live runner", client.removed, want)
 	}
 }
+
+type flakyRemoveClient struct {
+	*registryClient
+	failures int
+}
+
+func (f *flakyRemoveClient) RemoveRunner(ctx context.Context, id int) error {
+	if f.failures > 0 {
+		f.failures--
+		return errors.New("service unavailable")
+	}
+	return f.registryClient.RemoveRunner(ctx, id)
+}
+
+func TestRemoveStaleRegistrations_RetriesTransientFailuresOnTheNextListenerStart(t *testing.T) {
+	const scaleSetID = 5
+	registry := &registryClient{
+		fakeScaleSetClient: &fakeScaleSetClient{},
+		registered: map[string]scaleset.RunnerReference{
+			"g-lookup": {ID: 11, Name: "g-lookup", RunnerScaleSetID: scaleSetID},
+			"g-remove": {ID: 12, Name: "g-remove", RunnerScaleSetID: scaleSetID},
+		},
+		lookupErr: map[string]error{"g-lookup": errors.New("timeout")},
+	}
+	client := &flakyRemoveClient{registryClient: registry, failures: 1}
+	c := New(client, nil, nil, nil, nil, nil, ControllerConfig{StaleRunners: map[string][]string{
+		"g": {"g-lookup", "g-remove", "g-gone"},
+	}}, testLogger())
+
+	c.removeStaleRegistrations(context.Background(), "g", scaleSetID, testLogger())
+	if len(registry.removed) != 0 {
+		t.Fatalf("removed runner IDs = %v after only transient failures, want none", registry.removed)
+	}
+	delete(registry.lookupErr, "g-lookup")
+	c.removeStaleRegistrations(context.Background(), "g", scaleSetID, testLogger())
+	c.removeStaleRegistrations(context.Background(), "g", scaleSetID, testLogger())
+
+	got := slices.Sorted(slices.Values(registry.removed))
+	if want := []int{11, 12}; !slices.Equal(got, want) {
+		t.Fatalf("removed runner IDs = %v, want %v: each leftover retried until it is removed, then never again", got, want)
+	}
+}

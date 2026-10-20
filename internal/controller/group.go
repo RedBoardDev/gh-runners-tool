@@ -151,6 +151,7 @@ func (c *GroupController) removeStaleRegistrations(ctx context.Context, group st
 	delete(c.staleRunners, group)
 	c.mu.Unlock()
 
+	var retry []string
 	for _, name := range names {
 		ref, err := c.client.GetRunnerByName(ctx, name)
 		if err != nil {
@@ -159,6 +160,7 @@ func (c *GroupController) removeStaleRegistrations(ctx context.Context, group st
 				logging.KeyGroup, group,
 				logging.KeyError, err,
 			)
+			retry = append(retry, name)
 			continue
 		}
 		if ref == nil || ref.RunnerScaleSetID != scaleSetID {
@@ -170,12 +172,19 @@ func (c *GroupController) removeStaleRegistrations(ctx context.Context, group st
 				logging.KeyGroup, group,
 				logging.KeyError, err,
 			)
+			retry = append(retry, name)
 			continue
 		}
 		logger.InfoContext(ctx, "deregistered stale runner",
 			logging.KeyRunner, name,
 			logging.KeyGroup, group,
 		)
+	}
+
+	if len(retry) > 0 {
+		c.mu.Lock()
+		c.staleRunners[group] = append(c.staleRunners[group], retry...)
+		c.mu.Unlock()
 	}
 }
 
