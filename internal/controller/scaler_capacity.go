@@ -12,7 +12,7 @@ import (
 
 type capacityBudget interface {
 	Acquire(group string, want int) capacity.Grant
-	Capacity(group string, limit int) int
+	Capacity(group string) int
 }
 
 type capacityAdvertiser interface {
@@ -72,7 +72,7 @@ func (s *MacOSScaler) advertiseCapacity() {
 		s.advertiser.SetMaxRunners(s.maxRunners)
 		return
 	}
-	s.advertiser.SetMaxRunners(s.budget.Capacity(s.groupName, s.maxRunners))
+	s.advertiser.SetMaxRunners(s.budget.Capacity(s.groupName))
 }
 
 func (s *MacOSScaler) attach(scaleSetID int) {

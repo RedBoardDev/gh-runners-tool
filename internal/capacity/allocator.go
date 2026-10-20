@@ -12,6 +12,7 @@ type GroupSpec struct {
 	Name       string
 	Priority   int
 	MinRunners int
+	MaxRunners int
 	Reserve    Resources
 }
 
@@ -68,6 +69,7 @@ func (a *Allocator) Register(group string, w Waker) {
 	if e, ok := a.groups[group]; ok {
 		e.waker = w
 		e.closed = false
+		a.signalChange()
 	}
 }
 
@@ -75,9 +77,7 @@ func (a *Allocator) Unregister(group string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if e, ok := a.groups[group]; ok {
-		if e.waiting > 0 {
-			a.signalChange()
-		}
+		a.signalChange()
 		e.waker = nil
 		e.closed = true
 		e.waiting = 0
@@ -96,7 +96,7 @@ func (a *Allocator) Acquire(group string, want int) Grant {
 	}
 
 	var leases []*Lease
-	for len(leases) < want && a.admit(e, e.held, a.used) {
+	for len(leases) < want && a.admit(e, nil, a.used) {
 		a.used = addResources(a.used, e.spec.Reserve)
 		e.held++
 		leases = append(leases, &Lease{alloc: a, group: group, reserve: e.spec.Reserve})
@@ -116,20 +116,18 @@ func (a *Allocator) Acquire(group string, want int) Grant {
 	return Grant{Leases: leases, Waiting: waiting}
 }
 
-func (a *Allocator) Capacity(group string, limit int) int {
+func (a *Allocator) Capacity(group string) int {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
 	e, ok := a.groups[group]
-	if !ok || e.spec.Reserve.IsZero() {
-		return limit
+	if !ok {
+		return 0
 	}
-	held, used := e.held, a.used
-	for held < limit && a.admit(e, held, used) {
-		held++
-		used = addResources(used, e.spec.Reserve)
+	if e.spec.Reserve.IsZero() {
+		return e.spec.MaxRunners
 	}
-	return min(held, limit)
+	return e.held + a.planAdvertised()[e]
 }
 
 func (a *Allocator) grantUnbounded(group string, e *groupEntry, want int) Grant {

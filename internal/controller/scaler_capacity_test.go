@@ -89,7 +89,7 @@ type capacityFixture struct {
 
 func newCapacityFixture(t *testing.T, total capacity.Resources, minRunners, maxRunners int, reserve capacity.Resources, extra ...capacity.GroupSpec) *capacityFixture {
 	t.Helper()
-	specs := append([]capacity.GroupSpec{{Name: "g", MinRunners: minRunners, Reserve: reserve}}, extra...)
+	specs := append([]capacity.GroupSpec{{Name: "g", MinRunners: minRunners, MaxRunners: maxRunners, Reserve: reserve}}, extra...)
 	alloc := capacity.New(total, specs, slog.New(slog.DiscardHandler))
 	return newFixtureWithBudget(t, alloc, minRunners, maxRunners)
 }
@@ -751,18 +751,18 @@ func (a *recordingAdvertiser) advertised() int { return int(a.last.Load()) }
 
 func TestAdvertisedCapacity_FollowsWhatTheHostCanStillAdmit(t *testing.T) {
 	f := newCapacityFixture(t, reserve(12, 100), 0, 5, reserve(4, 1),
-		capacity.GroupSpec{Name: "other", Reserve: reserve(4, 1)},
+		capacity.GroupSpec{Name: "other", MaxRunners: 5, Reserve: reserve(4, 1)},
 	)
 	adv := &recordingAdvertiser{}
 
 	f.scaler.advertiseTo(adv)
-	if got := adv.advertised(); got != 3 {
-		t.Fatalf("initial advertised = %d, want 3 (12G budget / 4G reserve)", got)
+	if got := adv.advertised(); got != 2 {
+		t.Fatalf("initial advertised = %d, want 2 (12G budget / 4G reserve, one runner left to other)", got)
 	}
 
 	f.handleCount(1)
-	if got := adv.advertised(); got != 3 {
-		t.Fatalf("advertised after one runner = %d, want 3: a held runner is still capacity", got)
+	if got := adv.advertised(); got != 2 {
+		t.Fatalf("advertised after one runner = %d, want 2: a held runner is still capacity", got)
 	}
 
 	other := f.alloc.Acquire("other", 2)
@@ -775,8 +775,8 @@ func TestAdvertisedCapacity_FollowsWhatTheHostCanStillAdmit(t *testing.T) {
 		l.Release()
 	}
 	f.scaler.CapacityChanged()
-	if got := adv.advertised(); got != 3 {
-		t.Fatalf("advertised after the host freed up = %d, want 3", got)
+	if got := adv.advertised(); got != 2 {
+		t.Fatalf("advertised after the host freed up = %d, want 2", got)
 	}
 }
 
@@ -794,8 +794,8 @@ func TestAdvertisedCapacity_WithoutBudgetIsMaxRunners(t *testing.T) {
 
 func TestAdvertisedCapacity_SettlesOnCurrentCapacityUnderChurn(t *testing.T) {
 	alloc := capacity.New(reserve(12, 100), []capacity.GroupSpec{
-		{Name: "g", MinRunners: 1, Reserve: reserve(2, 1)},
-		{Name: "other", Priority: 10, Reserve: reserve(3, 1)},
+		{Name: "g", MinRunners: 1, MaxRunners: 5, Reserve: reserve(2, 1)},
+		{Name: "other", Priority: 10, MaxRunners: 3, Reserve: reserve(3, 1)},
 	}, slog.New(slog.DiscardHandler))
 	f := newFixtureWithBudget(t, alloc, 1, 5)
 	adv := &recordingAdvertiser{}
@@ -845,7 +845,7 @@ func waitAdvertised(t *testing.T, adv *recordingAdvertiser, alloc *capacity.Allo
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
 	for {
-		want := alloc.Capacity("g", 5)
+		want := alloc.Capacity("g")
 		got := adv.advertised()
 		if got == want {
 			return
