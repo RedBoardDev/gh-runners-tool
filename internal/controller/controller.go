@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"maps"
 	"sync"
 
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/config"
@@ -18,6 +19,7 @@ type scaleSetClient interface {
 	GetScaleSet(ctx context.Context, runnerGroupID int, name string) (*scaleset.RunnerScaleSet, error)
 	CreateScaleSet(ctx context.Context, name string, runnerGroupID int, labels []string) (*scaleset.RunnerScaleSet, error)
 	GenerateJITConfig(ctx context.Context, scaleSetID int, runnerName string) (string, int, error)
+	GetRunnerByName(ctx context.Context, name string) (*scaleset.RunnerReference, error)
 	RemoveRunner(ctx context.Context, runnerID int) error
 	OpenSession(ctx context.Context, scaleSetID int, owner string) (*scaleset.MessageSessionClient, error)
 	NewListener(session *scaleset.MessageSessionClient, scaleSetID int, maxRunners int) (*listener.Listener, error)
@@ -31,6 +33,7 @@ type ControllerConfig struct {
 	RunnerVersion string
 	RunnerGroupID int
 	HostID        string
+	StaleRunners  map[string][]string
 }
 
 type GroupController struct {
@@ -45,9 +48,10 @@ type GroupController struct {
 	budget    groupCapacity
 	stats     groupStatsSink
 
-	mu       sync.Mutex
-	scalers  map[string]*MacOSScaler
-	retained map[string]*MacOSScaler
+	mu           sync.Mutex
+	scalers      map[string]*MacOSScaler
+	retained     map[string]*MacOSScaler
+	staleRunners map[string][]string
 }
 
 func New(
@@ -62,16 +66,17 @@ func New(
 	opts ...Option,
 ) *GroupController {
 	c := &GroupController{
-		client:    client,
-		binary:    binary,
-		process:   process,
-		notifier:  notifier,
-		logMgr:    logMgr,
-		groups:    groups,
-		globalCfg: globalCfg,
-		logger:    logger,
-		scalers:   make(map[string]*MacOSScaler),
-		retained:  make(map[string]*MacOSScaler),
+		client:       client,
+		binary:       binary,
+		process:      process,
+		notifier:     notifier,
+		logMgr:       logMgr,
+		groups:       groups,
+		globalCfg:    globalCfg,
+		logger:       logger,
+		scalers:      make(map[string]*MacOSScaler),
+		retained:     make(map[string]*MacOSScaler),
+		staleRunners: maps.Clone(globalCfg.StaleRunners),
 	}
 	for _, opt := range opts {
 		opt(c)

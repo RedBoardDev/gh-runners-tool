@@ -69,7 +69,8 @@ func buildDaemon(cfg *config.Config, creds *auth.Credentials, githubURL string) 
 	binaryMgr := runner.NewBinaryManager(cfg.Runner.CacheDir, logger)
 	processMgr := runner.NewProcessManager(cfg.Runner.WorkdirBase, logger, host.process...)
 
-	if err := processMgr.CleanupStale(context.Background()); err != nil {
+	staleRunners, err := processMgr.CleanupStale(context.Background())
+	if err != nil {
 		logger.Warn("stale runner cleanup failed", logging.KeyError, err)
 	}
 	processMgr.KillOrphanRunners(context.Background())
@@ -83,6 +84,7 @@ func buildDaemon(cfg *config.Config, creds *auth.Credentials, githubURL string) 
 			RunnerVersion: cfg.Runner.Version,
 			RunnerGroupID: cfg.GitHub.RunnerGroupID,
 			HostID:        cfg.HostID,
+			StaleRunners:  staleRunners,
 		}, logger, host.controller...,
 	)
 

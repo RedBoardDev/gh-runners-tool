@@ -73,6 +73,8 @@ func (c *GroupController) runGroupOnce(
 		return fmt.Errorf("resolve scale set %q: %w", scaleSetName, err)
 	}
 
+	c.removeStaleRegistrations(ctx, group.Name, ss.ID, groupLogger)
+
 	hostname, err := os.Hostname()
 	if err != nil {
 		hostname = "unknown"
@@ -138,6 +140,43 @@ func (c *GroupController) resolveScaleSet(ctx context.Context, name string, labe
 		return nil, fmt.Errorf("create scale set %q: %w", name, err)
 	}
 	return &resolvedScaleSet{ID: ss.ID, Name: ss.Name}, nil
+}
+
+// Only names found in this host's own workdirs are looked up: listing the
+// scale set's runners instead would also remove the live runners of every
+// other host that shares a legacy scale set name.
+func (c *GroupController) removeStaleRegistrations(ctx context.Context, group string, scaleSetID int, logger *slog.Logger) {
+	c.mu.Lock()
+	names := c.staleRunners[group]
+	delete(c.staleRunners, group)
+	c.mu.Unlock()
+
+	for _, name := range names {
+		ref, err := c.client.GetRunnerByName(ctx, name)
+		if err != nil {
+			logger.WarnContext(ctx, "failed to look up stale runner registration",
+				logging.KeyRunner, name,
+				logging.KeyGroup, group,
+				logging.KeyError, err,
+			)
+			continue
+		}
+		if ref == nil || ref.RunnerScaleSetID != scaleSetID {
+			continue
+		}
+		if err := c.client.RemoveRunner(ctx, ref.ID); err != nil {
+			logger.WarnContext(ctx, "failed to deregister stale runner",
+				logging.KeyRunner, name,
+				logging.KeyGroup, group,
+				logging.KeyError, err,
+			)
+			continue
+		}
+		logger.InfoContext(ctx, "deregistered stale runner",
+			logging.KeyRunner, name,
+			logging.KeyGroup, group,
+		)
+	}
 }
 
 func labelsChanged(existing []scaleset.Label, desired []string) bool {

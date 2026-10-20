@@ -141,6 +141,7 @@ groups:
 
 - With `host_id` set, each group registers a scale set named `<group>-<host_id>` that carries the group name as a label, so `runs-on: kare-api` reaches every host. Each host keeps its own budget, and the advertised capacity routes jobs to the hosts that have room.
 - Without `host_id`, the scale set is named after the group, as before. Two hosts must never run the same group without `host_id`: they would share one scale set.
+- After a crash, startup kills the runners left behind and deregisters their registrations in the group's scale set. Only runners found in this host's own workdirs are deregistered, so another host's runners are never touched, even under a shared legacy name.
 - Switching an existing host to `host_id` is a one-time step: run `ghr purge` with the old config first, then set `host_id` and start. A scale set left under the old name keeps the group label with no listener behind it, and jobs may still be routed to it.
 
 ### Per-runner cgroup limits (Linux, cgroup v2)

@@ -128,6 +128,14 @@ func (c *Client) RemoveRunner(ctx context.Context, runnerID int) error {
 	return nil
 }
 
+func (c *Client) GetRunnerByName(ctx context.Context, name string) (*scaleset.RunnerReference, error) {
+	runner, err := c.inner.GetRunnerByName(ctx, name)
+	if err != nil {
+		return nil, fmt.Errorf("get runner %q: %w", name, err)
+	}
+	return runner, nil
+}
+
 func (c *Client) OpenSession(ctx context.Context, scaleSetID int, owner string) (*scaleset.MessageSessionClient, error) {
 	session, err := c.inner.MessageSessionClient(ctx, scaleSetID, owner)
 	if err != nil {

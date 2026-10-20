@@ -13,42 +13,49 @@ import (
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/logging"
 )
 
-func (m *ProcessManager) CleanupStale(ctx context.Context) error {
+func (m *ProcessManager) CleanupStale(ctx context.Context) (map[string][]string, error) {
 	entries, err := os.ReadDir(m.workdirBase)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil
+			return nil, nil
 		}
-		return fmt.Errorf("read workdir base %s: %w", m.workdirBase, err)
+		return nil, fmt.Errorf("read workdir base %s: %w", m.workdirBase, err)
 	}
 
+	stale := make(map[string][]string)
 	for _, groupEntry := range entries {
 		if !groupEntry.IsDir() {
 			continue
 		}
-		if err := m.cleanupStaleGroup(ctx, groupEntry.Name()); err != nil {
+		names, err := m.cleanupStaleGroup(ctx, groupEntry.Name())
+		if err != nil {
 			m.logger.WarnContext(ctx, "failed to cleanup stale group", logging.KeyGroup, groupEntry.Name(), logging.KeyError, err)
+		}
+		if len(names) > 0 {
+			stale[groupEntry.Name()] = names
 		}
 	}
 
-	return nil
+	return stale, nil
 }
 
-func (m *ProcessManager) cleanupStaleGroup(ctx context.Context, group string) error {
+func (m *ProcessManager) cleanupStaleGroup(ctx context.Context, group string) ([]string, error) {
 	groupDir := filepath.Join(m.workdirBase, group)
 	entries, err := os.ReadDir(groupDir)
 	if err != nil {
-		return fmt.Errorf("read group dir %s: %w", groupDir, err)
+		return nil, fmt.Errorf("read group dir %s: %w", groupDir, err)
 	}
 
+	var names []string
 	for _, runnerEntry := range entries {
 		if !runnerEntry.IsDir() {
 			continue
 		}
 		m.cleanupStaleRunner(ctx, group, runnerEntry.Name())
+		names = append(names, runnerEntry.Name())
 	}
 
-	return nil
+	return names, nil
 }
 
 func (m *ProcessManager) cleanupStaleRunner(ctx context.Context, group, runner string) {
