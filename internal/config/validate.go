@@ -118,6 +118,7 @@ func validate(cfg *Config) error {
 	}
 
 	errs = append(errs, validateHostID(cfg)...)
+	errs = append(errs, validateScaleSetNames(cfg)...)
 	errs = append(errs, validateCapacity(cfg)...)
 	errs = append(errs, validateResources(cfg)...)
 

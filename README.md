@@ -132,7 +132,7 @@ Sizes accept `K`, `M`, `G`, `T` and `KiB`, `MiB`, `GiB`, `TiB` (powers of 1024, 
 Run one ghr per host with the same groups and give each host its own `host_id`:
 
 ```yaml
-host_id: "hel1"      # optional; [A-Za-z0-9][A-Za-z0-9._-]*, scale set names stay within 64 characters
+host_id: "hel1"      # optional; [A-Za-z0-9][A-Za-z0-9._]* (no dash), scale set names stay within 64 characters
 
 groups:
   - name: "kare-api" # scale set "kare-api-hel1", runner label "kare-api"
@@ -140,6 +140,7 @@ groups:
 ```
 
 - With `host_id` set, each group registers a scale set named `<group>-<host_id>` that carries the group name as a label, so `runs-on: kare-api` reaches every host. Each host keeps its own budget, and the advertised capacity routes jobs to the hosts that have room.
+- Every host needs its own `host_id`: two hosts with the same one would share each group's scale set. A dash is rejected so that `<group>-<host_id>` can only come from one group on one host, and groups whose scale set names differ only by case are rejected.
 - Without `host_id`, the scale set is named after the group, as before. Two hosts must never run the same group without `host_id`: they would share one scale set.
 - After a crash, startup kills the runners left behind and deregisters their registrations in the group's scale set. Only runners found in this host's own workdirs are deregistered, so another host's runners are never touched, even under a shared legacy name.
 - Switching an existing host to `host_id` is a one-time step: run `ghr purge` with the old config first, then set `host_id` and start. A scale set left under the old name keeps the group label with no listener behind it, and jobs may still be routed to it.
