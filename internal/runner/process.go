@@ -190,7 +190,7 @@ func (m *ProcessManager) Stop(ctx context.Context, proc *Process) error {
 	}
 
 	m.logger.WarnContext(ctx, "runner did not exit after SIGTERM, sending SIGKILL", logging.KeyRunner, proc.Name, logging.KeyPID, proc.PID)
-	if err := proc.cmd.Process.Kill(); err != nil {
+	if err := proc.cmd.Process.Kill(); err != nil && !isProcessFinished(err) {
 		return fmt.Errorf("kill runner %s (pid %d): %w", proc.Name, proc.PID, err)
 	}
 	select {
