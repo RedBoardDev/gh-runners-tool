@@ -946,11 +946,68 @@ func TestShutdown_IsBoundedByItsContext(t *testing.T) {
 	if elapsed := time.Since(start); elapsed > 2*time.Second {
 		t.Fatalf("Shutdown took %s past a 50ms deadline", elapsed)
 	}
-	if used := f.alloc.Status().Used; !used.IsZero() {
-		t.Fatalf("leases kept after a timed out shutdown: %+v", used)
-	}
 	if !strings.Contains(logs.String(), "runners left registered on GitHub after shutdown") {
 		t.Fatalf("leftover registrations not logged:\n%s", logs.String())
+	}
+	waitLeasesReleased(t, f.alloc)
+}
+
+func waitLeasesReleased(t *testing.T, alloc *capacity.Allocator) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for !alloc.Status().Used.IsZero() {
+		if time.Now().After(deadline) {
+			t.Fatalf("leases kept after shutdown: %+v", alloc.Status().Used)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+type stubbornProcess struct {
+	*scriptedProcess
+	ignoresSIGTERM string
+	cleanupDone    chan struct{}
+}
+
+func (p *stubbornProcess) Stop(ctx context.Context, proc *runner.Process) error {
+	if proc.Name == p.ignoresSIGTERM {
+		<-ctx.Done()
+		return ctx.Err()
+	}
+	return p.scriptedProcess.Stop(ctx, proc)
+}
+
+func (p *stubbornProcess) Cleanup(proc *runner.Process) error {
+	<-p.cleanupDone
+	return p.scriptedProcess.Cleanup(proc)
+}
+
+func TestShutdown_DeregistersBeforeASlowStopOrCleanupAndReturnsAtTheDeadline(t *testing.T) {
+	f := newCapacityFixture(t, reserve(16, 16), 0, 5, reserve(4, 4))
+	f.handleCount(2)
+	names := f.runnerNames()
+	f.startJob(names[1])
+	process := &stubbornProcess{scriptedProcess: f.process, ignoresSIGTERM: names[0], cleanupDone: make(chan struct{})}
+	f.scaler.process = process
+	var logs bytes.Buffer
+	f.scaler.logger = slog.New(slog.NewTextHandler(&logs, nil))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	f.scaler.Shutdown(ctx)
+	elapsed := time.Since(start)
+	close(process.cleanupDone)
+	waitLeasesReleased(t, f.alloc)
+
+	if elapsed > 2*time.Second {
+		t.Fatalf("Shutdown took %s past a 200ms deadline", elapsed)
+	}
+	if got := len(f.client.removed); got != 2 {
+		t.Fatalf("deregistered %d runners, want both despite the stuck stop and cleanup", got)
+	}
+	if strings.Contains(logs.String(), "runners left registered") {
+		t.Fatalf("deregistered runners reported as left registered:\n%s", logs.String())
 	}
 }
 

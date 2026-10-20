@@ -162,7 +162,10 @@ func (s *MacOSScaler) teardownProcess(ctx context.Context, runnerName string, pr
 			logging.KeyError, stopErr,
 		)
 	}
+	return s.cleanupProcess(ctx, runnerName, proc)
+}
 
+func (s *MacOSScaler) cleanupProcess(ctx context.Context, runnerName string, proc *runner.Process) error {
 	cleanupErr := s.process.Cleanup(proc)
 	s.releaseLease(runnerName)
 	if cleanupErr != nil {
@@ -182,65 +185,87 @@ func (s *MacOSScaler) teardownProcess(ctx context.Context, runnerName string, pr
 // TimeoutStopSec, whose SIGKILL then leaves every pending runner registered.
 func (s *MacOSScaler) Shutdown(ctx context.Context) {
 	s.mu.Lock()
-	all := make(map[string]*runner.Process, len(s.idle)+len(s.busy))
-	maps.Copy(all, s.idle)
-	maps.Copy(all, s.busy)
+	idle, busy := s.idle, s.busy
 	s.idle = make(map[string]*runner.Process)
 	s.busy = make(map[string]*runner.Process)
 	s.stopped = true
 	s.mu.Unlock()
 
 	var (
-		wg      sync.WaitGroup
 		leftMu  sync.Mutex
-		left    []string
+		left    = make(map[string]struct{}, len(idle)+len(busy))
 		leftErr []error
 	)
-	for name, proc := range all {
-		wg.Go(func() {
-			if err := s.shutdownRunner(ctx, name, proc); err != nil {
-				leftMu.Lock()
-				left = append(left, name)
-				leftErr = append(leftErr, err)
-				leftMu.Unlock()
-			}
-		})
+	for name := range idle {
+		left[name] = struct{}{}
 	}
-	wg.Wait()
+	for name := range busy {
+		left[name] = struct{}{}
+	}
+	settle := func(name string, err error) {
+		leftMu.Lock()
+		defer leftMu.Unlock()
+		if err != nil {
+			leftErr = append(leftErr, err)
+			return
+		}
+		delete(left, name)
+	}
 
+	var wg sync.WaitGroup
+	for name, proc := range idle {
+		wg.Go(func() { s.shutdownRunner(ctx, name, proc, true, settle) })
+	}
+	for name, proc := range busy {
+		wg.Go(func() { s.shutdownRunner(ctx, name, proc, false, settle) })
+	}
+
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-ctx.Done():
+	}
+
+	leftMu.Lock()
+	defer leftMu.Unlock()
 	if len(left) > 0 {
-		slices.Sort(left)
 		s.logger.WarnContext(ctx, "runners left registered on GitHub after shutdown",
 			logging.KeyGroup, s.groupName,
-			"runners", left,
+			"runners", slices.Sorted(maps.Keys(left)),
 			logging.KeyError, errors.Join(leftErr...),
 		)
 	}
 }
 
-func (s *MacOSScaler) shutdownRunner(ctx context.Context, name string, proc *runner.Process) error {
-	if stopErr := s.process.Stop(ctx, proc); stopErr != nil {
-		s.logger.WarnContext(ctx, "failed to stop runner during shutdown",
-			logging.KeyRunner, name,
-			logging.KeyError, stopErr,
-		)
+// Stopping an idle runner before GitHub accepts its removal lets GitHub assign
+// it a job in between, and that job then fails on a dead runner.
+func (s *MacOSScaler) shutdownRunner(ctx context.Context, name string, proc *runner.Process, isIdle bool, settle func(string, error)) {
+	if isIdle {
+		settle(name, s.removeRegistration(ctx, name, proc.RunnerID))
+		s.stopForShutdown(ctx, name, proc)
+	} else {
+		s.stopForShutdown(ctx, name, proc)
+		settle(name, s.removeRegistration(ctx, name, proc.RunnerID))
 	}
-	cleanupErr := s.process.Cleanup(proc)
-	s.releaseLease(name)
-	if cleanupErr != nil {
+	if err := s.cleanupProcess(ctx, name, proc); err != nil {
 		s.logger.WarnContext(ctx, "failed to cleanup runner during shutdown",
 			logging.KeyRunner, name,
-			logging.KeyError, cleanupErr,
+			logging.KeyError, err,
 		)
 	}
-	removeErr := s.removeRegistration(ctx, name, proc.RunnerID)
-	if logsErr := s.logMgr.RemoveRunnerLogs(s.groupName, name); logsErr != nil {
-		s.logger.WarnContext(ctx, "failed to remove runner log dir during shutdown",
+}
+
+func (s *MacOSScaler) stopForShutdown(ctx context.Context, name string, proc *runner.Process) {
+	if err := s.process.Stop(ctx, proc); err != nil {
+		s.logger.WarnContext(ctx, "failed to stop runner during shutdown",
 			logging.KeyRunner, name,
-			logging.KeyError, logsErr,
+			logging.KeyError, err,
 		)
 	}
-	return removeErr
 }
 
 func (s *MacOSScaler) Snapshots() []model.RunnerSnapshot {
