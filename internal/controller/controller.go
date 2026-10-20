@@ -121,10 +121,14 @@ func (c *GroupController) Shutdown(ctx context.Context) {
 	}
 	c.mu.Unlock()
 
+	var wg sync.WaitGroup
 	for name, s := range scalers {
-		c.logger.InfoContext(ctx, "shutting down scaler", logging.KeyGroup, name)
-		s.Shutdown(ctx)
+		wg.Go(func() {
+			c.logger.InfoContext(ctx, "shutting down scaler", logging.KeyGroup, name)
+			s.Shutdown(ctx)
+		})
 	}
+	wg.Wait()
 }
 
 func (c *GroupController) Snapshots() map[string][]model.RunnerSnapshot {

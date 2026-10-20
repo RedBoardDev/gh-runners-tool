@@ -59,8 +59,10 @@ func (c *GroupController) scalerFor(group *config.GroupConfig, scaleSetID int, c
 	return scaler
 }
 
-func (c *GroupController) forgetScaler(name string) {
+// Shutting the scaler down here, on the already cancelled listener context,
+// would deregister its runners outside the daemon's shutdown timeout.
+func (c *GroupController) retainForShutdown(name string, s *MacOSScaler) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	delete(c.retained, name)
+	c.retained[name] = s
 }

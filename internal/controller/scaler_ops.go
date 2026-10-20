@@ -4,7 +4,11 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"maps"
+	"slices"
+	"sync"
 	"time"
 
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/capacity"
@@ -72,26 +76,30 @@ func (s *MacOSScaler) startRunner(ctx context.Context, lease *capacity.Lease) (e
 }
 
 func (s *MacOSScaler) deregisterRunner(ctx context.Context, name string, runnerID int) {
-	if runnerID == 0 {
-		return
-	}
-
 	regCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
 	defer cancel()
 
-	if err := s.client.RemoveRunner(regCtx, runnerID); err != nil {
+	if err := s.removeRegistration(regCtx, name, runnerID); err != nil {
 		s.logger.WarnContext(ctx, "failed to deregister runner from GitHub",
 			logging.KeyRunner, name,
 			logging.KeyGroup, s.groupName,
 			logging.KeyError, err,
 		)
-		return
 	}
+}
 
+func (s *MacOSScaler) removeRegistration(ctx context.Context, name string, runnerID int) error {
+	if runnerID == 0 {
+		return nil
+	}
+	if err := s.client.RemoveRunner(ctx, runnerID); err != nil {
+		return err
+	}
 	s.logger.InfoContext(ctx, "runner deregistered",
 		logging.KeyRunner, name,
 		logging.KeyGroup, s.groupName,
 	)
+	return nil
 }
 
 func (s *MacOSScaler) killRunner(ctx context.Context, runnerName string) error {
@@ -170,49 +178,69 @@ func (s *MacOSScaler) teardownProcess(ctx context.Context, runnerName string, pr
 	return nil
 }
 
+// Detaching deregistration from ctx lets shutdown outlive systemd's
+// TimeoutStopSec, whose SIGKILL then leaves every pending runner registered.
 func (s *MacOSScaler) Shutdown(ctx context.Context) {
-	type tracked struct {
-		name string
-		proc *runner.Process
-	}
-
 	s.mu.Lock()
-	all := make([]tracked, 0, len(s.idle)+len(s.busy))
-	for name, p := range s.idle {
-		all = append(all, tracked{name, p})
-	}
-	for name, p := range s.busy {
-		all = append(all, tracked{name, p})
-	}
+	all := make(map[string]*runner.Process, len(s.idle)+len(s.busy))
+	maps.Copy(all, s.idle)
+	maps.Copy(all, s.busy)
 	s.idle = make(map[string]*runner.Process)
 	s.busy = make(map[string]*runner.Process)
 	s.stopped = true
 	s.mu.Unlock()
 
-	for _, t := range all {
-		stopErr := s.process.Stop(ctx, t.proc)
-		if stopErr != nil {
-			s.logger.WarnContext(ctx, "failed to stop runner during shutdown",
-				logging.KeyRunner, t.proc.Name,
-				logging.KeyError, stopErr,
-			)
-		}
-		cleanupErr := s.process.Cleanup(t.proc)
-		s.releaseLease(t.name)
-		if cleanupErr != nil {
-			s.logger.WarnContext(ctx, "failed to cleanup runner during shutdown",
-				logging.KeyRunner, t.proc.Name,
-				logging.KeyError, cleanupErr,
-			)
-		}
-		s.deregisterRunner(ctx, t.name, t.proc.RunnerID)
-		if logsErr := s.logMgr.RemoveRunnerLogs(s.groupName, t.proc.Name); logsErr != nil {
-			s.logger.WarnContext(ctx, "failed to remove runner log dir during shutdown",
-				logging.KeyRunner, t.proc.Name,
-				logging.KeyError, logsErr,
-			)
-		}
+	var (
+		wg      sync.WaitGroup
+		leftMu  sync.Mutex
+		left    []string
+		leftErr []error
+	)
+	for name, proc := range all {
+		wg.Go(func() {
+			if err := s.shutdownRunner(ctx, name, proc); err != nil {
+				leftMu.Lock()
+				left = append(left, name)
+				leftErr = append(leftErr, err)
+				leftMu.Unlock()
+			}
+		})
 	}
+	wg.Wait()
+
+	if len(left) > 0 {
+		slices.Sort(left)
+		s.logger.WarnContext(ctx, "runners left registered on GitHub after shutdown",
+			logging.KeyGroup, s.groupName,
+			"runners", left,
+			logging.KeyError, errors.Join(leftErr...),
+		)
+	}
+}
+
+func (s *MacOSScaler) shutdownRunner(ctx context.Context, name string, proc *runner.Process) error {
+	if stopErr := s.process.Stop(ctx, proc); stopErr != nil {
+		s.logger.WarnContext(ctx, "failed to stop runner during shutdown",
+			logging.KeyRunner, name,
+			logging.KeyError, stopErr,
+		)
+	}
+	cleanupErr := s.process.Cleanup(proc)
+	s.releaseLease(name)
+	if cleanupErr != nil {
+		s.logger.WarnContext(ctx, "failed to cleanup runner during shutdown",
+			logging.KeyRunner, name,
+			logging.KeyError, cleanupErr,
+		)
+	}
+	removeErr := s.removeRegistration(ctx, name, proc.RunnerID)
+	if logsErr := s.logMgr.RemoveRunnerLogs(s.groupName, name); logsErr != nil {
+		s.logger.WarnContext(ctx, "failed to remove runner log dir during shutdown",
+			logging.KeyRunner, name,
+			logging.KeyError, logsErr,
+		)
+	}
+	return removeErr
 }
 
 func (s *MacOSScaler) Snapshots() []model.RunnerSnapshot {

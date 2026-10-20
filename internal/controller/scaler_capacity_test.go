@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -8,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -641,10 +643,6 @@ func TestScalerFor_ReusesScalerAcrossListenerRestartsOnlyWithCapacity(t *testing
 			t.Errorf("scaleSetID = %d, want the new session's 2", second.scaleSetID)
 		}
 
-		c.forgetScaler(group.Name)
-		if third := c.scalerFor(group, 3, "/cache", testLogger()); third == first {
-			t.Error("a forgotten scaler must not be reused")
-		}
 	})
 
 	t.Run("without capacity every restart builds a fresh scaler as before", func(t *testing.T) {
@@ -865,6 +863,63 @@ func TestShutdown_DeregistersRunnersAndKeepsTheScaleSet(t *testing.T) {
 
 	if got := len(f.client.removed); got != 2 {
 		t.Fatalf("deregistered %d runners at shutdown, want 2", got)
+	}
+}
+
+func TestShutdown_DeregistersRunnersInParallel(t *testing.T) {
+	f := newCapacityFixture(t, reserve(16, 16), 0, 5, reserve(4, 4))
+	f.handleCount(3)
+	var inFlight atomic.Int32
+	f.scaler.client = &hookClient{fakeScaleSetClient: f.client, onRemove: func(int) error {
+		inFlight.Add(1)
+		deadline := time.Now().Add(2 * time.Second)
+		for inFlight.Load() < 3 {
+			if time.Now().After(deadline) {
+				return errors.New("removals ran one after another")
+			}
+			time.Sleep(time.Millisecond)
+		}
+		return nil
+	}}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	f.scaler.Shutdown(ctx)
+
+	if got := len(f.client.removed); got != 3 {
+		t.Fatalf("deregistered %d runners, want 3 removed concurrently", got)
+	}
+}
+
+type stalledRemoveClient struct {
+	*fakeScaleSetClient
+}
+
+func (stalledRemoveClient) RemoveRunner(ctx context.Context, _ int) error {
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+func TestShutdown_IsBoundedByItsContext(t *testing.T) {
+	f := newCapacityFixture(t, reserve(16, 16), 0, 5, reserve(4, 4))
+	f.handleCount(2)
+	f.scaler.client = stalledRemoveClient{f.client}
+	var logs bytes.Buffer
+	f.scaler.logger = slog.New(slog.NewTextHandler(&logs, nil))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	f.scaler.Shutdown(ctx)
+
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("Shutdown took %s past a 50ms deadline", elapsed)
+	}
+	if used := f.alloc.Status().Used; !used.IsZero() {
+		t.Fatalf("leases kept after a timed out shutdown: %+v", used)
+	}
+	if !strings.Contains(logs.String(), "runners left registered on GitHub after shutdown") {
+		t.Fatalf("leftover registrations not logged:\n%s", logs.String())
 	}
 }
 

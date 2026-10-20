@@ -180,6 +180,7 @@ OOMPolicy=continue
 WantedBy=multi-user.target
 ```
 
+- Keep `daemon.shutdown_timeout` (default 30s) well below `TimeoutStopSec`: on stop, ghr stops every runner and deregisters it from GitHub in parallel within that timeout, and logs the runners it could not deregister in time.
 - `Delegate=yes` hands the unit's cgroup subtree to ghr.
 - Keep the default `KillMode=control-group`. With `process` or `mixed`, runner cgroups can survive a stop, and the next start then fails with `EBUSY` on cgroup v2's no-internal-processes rule.
 - On systemd 254 or newer, `DelegateSubgroup=daemon` is an option: systemd then places the service in the `daemon` leaf itself.

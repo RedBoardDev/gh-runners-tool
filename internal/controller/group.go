@@ -114,8 +114,7 @@ func (c *GroupController) runGroupOnce(
 	c.unregisterScaler(group.Name)
 
 	if errors.Is(listenerErr, context.Canceled) {
-		c.forgetScaler(group.Name)
-		scaler.Shutdown(ctx)
+		c.retainForShutdown(group.Name, scaler)
 		return context.Canceled
 	}
 
