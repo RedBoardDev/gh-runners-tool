@@ -30,12 +30,27 @@ func (a *Allocator) planAdvertised() plan {
 		}
 	}
 
-	for dealt := true; dealt; {
-		dealt = false
-		for _, e := range groups {
-			dealt = take(e) || dealt
+	// Taken after the saturated groups, this runner would be one the loaded
+	// group already advertises, and the idle group's first job would wait.
+	for _, e := range groups {
+		if !e.saturated {
+			take(e)
 		}
 	}
+	deal := func(eligible func(*groupEntry) bool) {
+		for dealt := true; dealt; {
+			dealt = false
+			for _, e := range groups {
+				if eligible(e) && take(e) {
+					dealt = true
+				}
+			}
+		}
+	}
+	deal(func(e *groupEntry) bool { return e.saturated })
+	// Before any group reports a saturated count, as at startup, skipping this
+	// would advertise a single runner per group.
+	deal(func(*groupEntry) bool { return true })
 	if contended {
 		return planned
 	}

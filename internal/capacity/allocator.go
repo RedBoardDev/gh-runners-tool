@@ -27,12 +27,13 @@ type Grant struct {
 }
 
 type groupEntry struct {
-	spec    GroupSpec
-	held    int
-	waiting int
-	waitSeq uint64
-	waker   Waker
-	closed  bool
+	spec      GroupSpec
+	held      int
+	waiting   int
+	waitSeq   uint64
+	waker     Waker
+	closed    bool
+	saturated bool
 }
 
 type Allocator struct {
@@ -69,6 +70,7 @@ func (a *Allocator) Register(group string, w Waker) {
 	if e, ok := a.groups[group]; ok {
 		e.waker = w
 		e.closed = false
+		e.saturated = false
 		a.signalChange()
 	}
 }
@@ -114,6 +116,15 @@ func (a *Allocator) Acquire(group string, want int) Grant {
 
 	a.logWaitingChange(group, e.spec.Reserve, freeNow, waiting, change)
 	return Grant{Leases: leases, Waiting: waiting}
+}
+
+func (a *Allocator) SetSaturated(group string, saturated bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if e, ok := a.groups[group]; ok && e.saturated != saturated {
+		e.saturated = saturated
+		a.signalChange()
+	}
 }
 
 func (a *Allocator) Capacity(group string) int {

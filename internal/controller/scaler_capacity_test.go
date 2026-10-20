@@ -778,6 +778,37 @@ func TestAdvertisedCapacity_FollowsWhatTheHostCanStillAdmit(t *testing.T) {
 	}
 }
 
+func TestAdvertisedCapacity_LoadedGroupClaimsTheIdleHostInOneStep(t *testing.T) {
+	f := newCapacityFixture(t, reserve(8, 100), 0, 10, reserve(1, 1),
+		capacity.GroupSpec{Name: "other", MaxRunners: 10, Reserve: reserve(1, 1)},
+	)
+	adv := &recordingAdvertiser{}
+	f.scaler.advertiseTo(adv)
+	first := adv.advertised()
+
+	f.handleCount(first)
+
+	if got := adv.advertised(); got != 7 {
+		t.Fatalf("advertised after GitHub assigned all %d runners = %d, want 7: every free runner but the idle group's one", first, got)
+	}
+}
+
+func TestAdvertisedCapacity_GroupWithSpareCapacityKeepsOneRunnerOfHeadroom(t *testing.T) {
+	f := newCapacityFixture(t, reserve(8, 100), 0, 10, reserve(1, 1),
+		capacity.GroupSpec{Name: "other", MaxRunners: 10, Reserve: reserve(1, 1)},
+	)
+	adv := &recordingAdvertiser{}
+	f.scaler.advertiseTo(adv)
+	f.handleCount(adv.advertised())
+	f.alloc.SetSaturated("other", true)
+
+	f.handleCount(2)
+
+	if got := adv.advertised(); got != 3 {
+		t.Fatalf("advertised with 2 jobs below a cap of 7 = %d, want 3: two held runners and one of headroom", got)
+	}
+}
+
 func TestAdvertisedCapacity_WithoutBudgetIsMaxRunners(t *testing.T) {
 	f := newFixtureWithBudget(t, nil, 1, 4)
 	adv := &recordingAdvertiser{}

@@ -171,6 +171,87 @@ func TestCapacity_LastFreeRunnerIsOfferedToEveryIdleGroup(t *testing.T) {
 	}
 }
 
+func TestCapacity_SaturatedGroupsShareWhatIdleGroupsLeave(t *testing.T) {
+	tests := []struct {
+		name      string
+		saturated []string
+		want      map[string]int
+	}{
+		{
+			name:      "one loaded group takes all but one runner per idle group",
+			saturated: []string{"b"},
+			want:      map[string]int{"a": 1, "b": 6, "c": 1},
+		},
+		{
+			name:      "loaded groups split the budget",
+			saturated: []string{"a", "b"},
+			want:      map[string]int{"a": 4, "b": 3, "c": 1},
+		},
+		{
+			name: "idle groups share the budget before any demand is known",
+			want: map[string]int{"a": 3, "b": 3, "c": 2},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := newAllocator(res(8, 100),
+				capped(spec("a", 0, 0, res(1, 1)), 10),
+				capped(spec("b", 0, 0, res(1, 1)), 10),
+				capped(spec("c", 0, 0, res(1, 1)), 10),
+			)
+			for _, name := range tt.saturated {
+				a.SetSaturated(name, true)
+			}
+
+			if got := advertisedExtras(a); !maps.Equal(got, tt.want) {
+				t.Fatalf("advertised extras = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCapacity_SaturatedGroupCappedByMaxRunnersLeavesTheRestToIdleGroups(t *testing.T) {
+	a := newAllocator(res(8, 100),
+		capped(spec("idle", 0, 0, res(1, 1)), 10),
+		capped(spec("loaded", 0, 0, res(1, 1)), 3),
+	)
+	a.SetSaturated("loaded", true)
+
+	got := advertisedExtras(a)
+	if want := map[string]int{"idle": 5, "loaded": 3}; !maps.Equal(got, want) {
+		t.Fatalf("advertised extras = %v, want %v", got, want)
+	}
+}
+
+func TestCapacity_LastFreeRunnerStaysWithTheIdleGroup(t *testing.T) {
+	a := newAllocator(res(4, 100),
+		capped(spec("idle", 0, 0, res(1, 1)), 10),
+		capped(spec("loaded", 0, 0, res(1, 1)), 10),
+	)
+	a.SetSaturated("loaded", true)
+	mustAcquire(t, a, "loaded", 3, 3, 0)
+
+	got := advertisedExtras(a)
+	if want := map[string]int{"idle": 1, "loaded": 1}; !maps.Equal(got, want) {
+		t.Fatalf("advertised extras = %v, want %v: the idle group keeps the free runner, the loaded one only its anti-starvation runner", got, want)
+	}
+}
+
+func TestCapacity_ListenerRestartForgetsSaturation(t *testing.T) {
+	a := newAllocator(res(8, 100),
+		capped(spec("a", 0, 0, res(1, 1)), 10),
+		capped(spec("b", 0, 0, res(1, 1)), 10),
+	)
+	a.SetSaturated("b", true)
+	a.Unregister("b")
+	a.Register("b", nil)
+
+	if got, want := advertisedExtras(a), map[string]int{"a": 4, "b": 4}; !maps.Equal(got, want) {
+		t.Fatalf("advertised extras = %v, want %v", got, want)
+	}
+}
+
 func TestCapacity_ClosedGroupLeavesItsShareToOthers(t *testing.T) {
 	a := newAllocator(res(16, 100),
 		capped(spec("a", 0, 0, res(4, 1)), 10),

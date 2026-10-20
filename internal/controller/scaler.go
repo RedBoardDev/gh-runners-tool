@@ -44,6 +44,7 @@ type MacOSScaler struct {
 
 	advertiseMu sync.Mutex
 	advertiser  capacityAdvertiser
+	advertised  int
 
 	mu      sync.Mutex
 	idle    map[string]*runner.Process
@@ -91,6 +92,7 @@ func (s *MacOSScaler) HandleDesiredRunnerCount(ctx context.Context, count int) (
 	s.reconcileMu.Lock()
 	defer s.reconcileMu.Unlock()
 
+	s.reportAssigned(count)
 	runners := s.reconcile(ctx, count)
 	// The listener polls right after this returns; leaving the update to the
 	// allocator's notifier can send the pre-reconcile capacity for a whole poll.

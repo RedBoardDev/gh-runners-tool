@@ -13,6 +13,7 @@ import (
 type capacityBudget interface {
 	Acquire(group string, want int) capacity.Grant
 	Capacity(group string) int
+	SetSaturated(group string, saturated bool)
 }
 
 type capacityAdvertiser interface {
@@ -72,7 +73,21 @@ func (s *MacOSScaler) advertiseCapacity() {
 		s.advertiser.SetMaxRunners(s.maxRunners)
 		return
 	}
-	s.advertiser.SetMaxRunners(s.budget.Capacity(s.groupName))
+	s.advertised = s.budget.Capacity(s.groupName)
+	s.advertiser.SetMaxRunners(s.advertised)
+}
+
+// GitHub caps the assigned count at the capacity advertised for the poll that
+// produced it: comparing with a recomputed capacity instead makes a loaded
+// group look idle as soon as its capacity grows, and the ramp-up stalls.
+func (s *MacOSScaler) reportAssigned(count int) {
+	if s.budget == nil {
+		return
+	}
+	s.advertiseMu.Lock()
+	saturated := count > 0 && count >= s.advertised
+	s.advertiseMu.Unlock()
+	s.budget.SetSaturated(s.groupName, saturated)
 }
 
 func (s *MacOSScaler) attach(scaleSetID int) {
