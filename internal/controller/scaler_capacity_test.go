@@ -7,7 +7,9 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -298,6 +300,7 @@ type channelWaker struct {
 }
 
 func (w channelWaker) Wake(context.Context) { w.woken <- struct{}{} }
+func (channelWaker) CapacityChanged()       {}
 
 func TestStartRunner_FailureDoesNotWakeOtherGroups(t *testing.T) {
 	alloc := capacity.New(reserve(8, 8), []capacity.GroupSpec{
@@ -735,5 +738,138 @@ func TestIdleRunnerThatExitsOnItsOwnReleasesItsLease(t *testing.T) {
 			t.Fatalf("a runner that died on its own still holds its lease: reserved=%d", f.reserved())
 		case <-time.After(10 * time.Millisecond):
 		}
+	}
+}
+
+type recordingAdvertiser struct {
+	last atomic.Int64
+}
+
+func (a *recordingAdvertiser) SetMaxRunners(count int) { a.last.Store(int64(count)) }
+
+func (a *recordingAdvertiser) advertised() int { return int(a.last.Load()) }
+
+func TestAdvertisedCapacity_FollowsWhatTheHostCanStillAdmit(t *testing.T) {
+	f := newCapacityFixture(t, reserve(12, 100), 0, 5, reserve(4, 1),
+		capacity.GroupSpec{Name: "other", Reserve: reserve(4, 1)},
+	)
+	adv := &recordingAdvertiser{}
+
+	f.scaler.advertiseTo(adv)
+	if got := adv.advertised(); got != 3 {
+		t.Fatalf("initial advertised = %d, want 3 (12G budget / 4G reserve)", got)
+	}
+
+	f.handleCount(1)
+	if got := adv.advertised(); got != 3 {
+		t.Fatalf("advertised after one runner = %d, want 3: a held runner is still capacity", got)
+	}
+
+	other := f.alloc.Acquire("other", 2)
+	f.handleCount(1)
+	if got := adv.advertised(); got != 1 {
+		t.Fatalf("advertised on a saturated host = %d, want 1 (only the runner it holds)", got)
+	}
+
+	for _, l := range other.Leases {
+		l.Release()
+	}
+	f.scaler.CapacityChanged()
+	if got := adv.advertised(); got != 3 {
+		t.Fatalf("advertised after the host freed up = %d, want 3", got)
+	}
+}
+
+func TestAdvertisedCapacity_WithoutBudgetIsMaxRunners(t *testing.T) {
+	f := newFixtureWithBudget(t, nil, 1, 4)
+	adv := &recordingAdvertiser{}
+
+	f.scaler.advertiseTo(adv)
+	f.handleCount(2)
+
+	if got := adv.advertised(); got != 4 {
+		t.Fatalf("advertised = %d, want max_runners 4", got)
+	}
+}
+
+func TestAdvertisedCapacity_SettlesOnCurrentCapacityUnderChurn(t *testing.T) {
+	alloc := capacity.New(reserve(12, 100), []capacity.GroupSpec{
+		{Name: "g", MinRunners: 1, Reserve: reserve(2, 1)},
+		{Name: "other", Priority: 10, Reserve: reserve(3, 1)},
+	}, slog.New(slog.DiscardHandler))
+	f := newFixtureWithBudget(t, alloc, 1, 5)
+	adv := &recordingAdvertiser{}
+	f.scaler.advertiseTo(adv)
+	alloc.Register("g", f.scaler)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- alloc.Run(ctx) }()
+	defer func() {
+		cancel()
+		<-done
+	}()
+
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		for i := range 200 {
+			grant := alloc.Acquire("other", 1+i%3)
+			for _, l := range grant.Leases {
+				l.Release()
+			}
+		}
+	})
+	wg.Go(func() {
+		for i := range 200 {
+			f.handleCount(i % 4)
+			if idle := f.snapshotNames("idle"); len(idle) > 0 && i%2 == 0 {
+				f.startJob(idle[0])
+			}
+			if busy := f.snapshotNames("busy"); len(busy) > 0 && i%3 == 0 {
+				f.completeJob(busy[0])
+			}
+		}
+	})
+	wg.Wait()
+	waitAdvertised(t, adv, alloc)
+
+	hog := alloc.Acquire("other", 3)
+	waitAdvertised(t, adv, alloc)
+	for _, l := range hog.Leases {
+		l.Release()
+	}
+	waitAdvertised(t, adv, alloc)
+}
+
+func waitAdvertised(t *testing.T, adv *recordingAdvertiser, alloc *capacity.Allocator) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		want := alloc.Capacity("g", 5)
+		got := adv.advertised()
+		if got == want {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("advertised = %d, want the current capacity %d", got, want)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+func TestShutdown_DeregistersRunnersAndKeepsTheScaleSet(t *testing.T) {
+	f := newCapacityFixture(t, reserve(16, 16), 0, 5, reserve(4, 4))
+	f.handleCount(2)
+
+	f.scaler.Shutdown(context.Background())
+
+	if got := len(f.client.removed); got != 2 {
+		t.Fatalf("deregistered %d runners at shutdown, want 2", got)
+	}
+}
+
+func TestControllerHasNoWayToDeleteScaleSets(t *testing.T) {
+	if _, ok := reflect.TypeFor[scaleSetClient]().MethodByName("DeleteScaleSet"); ok {
+		t.Fatal("stopping one host must never delete a scale set: deletion belongs to `ghr purge` only")
 	}
 }

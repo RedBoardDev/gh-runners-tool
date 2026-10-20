@@ -117,6 +117,7 @@ func validate(cfg *Config) error {
 		errs = append(errs, fmt.Errorf("logging.format must be one of: text, json; got %q", cfg.Logging.Format))
 	}
 
+	errs = append(errs, validateHostID(cfg)...)
 	errs = append(errs, validateCapacity(cfg)...)
 	errs = append(errs, validateResources(cfg)...)
 

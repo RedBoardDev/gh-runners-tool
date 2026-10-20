@@ -86,9 +86,11 @@ ghr restart
 # Stop the daemon
 ghr stop
 
-# Emergency reset (kill all runners, clean workdirs)
+# Emergency reset (kill all runners, delete this host's scale sets, clean workdirs)
 ghr purge
 ```
+
+`ghr stop` and `ghr restart` keep the scale sets on GitHub; only `ghr purge` deletes them. A label change on an existing scale set is therefore applied by `ghr purge` followed by `ghr start`.
 
 ### Host capacity budget
 
@@ -120,9 +122,26 @@ groups:
 - When capacity is released, waiting groups are re-evaluated immediately in priority order instead of at their next poll.
 - With a budget configured, idle runners above `max(min_runners, demand - busy)` are torn down when queued jobs disappear, so they stop holding capacity. Without a budget nothing is torn down.
 - A dimension left out of `capacity` is not limited. `reserve` and `priority` without `capacity` are ignored with a warning.
+- Each group advertises to GitHub, as its scale set's maximum capacity, the runners it holds plus the ones the budget would admit right now (bounded by `max_runners`, the other groups' minimums and strict priority). GitHub then stops assigning jobs to a host that has no room for them. The value is refreshed on every reservation, release and change of waiting demand, and GitHub reads it at the next long poll. Warm `min_runners` runners count as capacity they already hold, never as room for more.
 - Deferred demand is reported as an info-level "waiting for capacity" health issue, never as a degraded group. `ghr status` (and the JSON status API) shows the budget total, used and free, and per group the reserved and waiting runner counts. Waiting state changes are logged once per change.
 
 Sizes accept `K`, `M`, `G`, `T` and `KiB`, `MiB`, `GiB`, `TiB` (powers of 1024, like systemd and Docker) as well as `KB`, `MB`, `GB`, `TB` (powers of 1000).
+
+### Several hosts
+
+Run one ghr per host with the same groups and give each host its own `host_id`:
+
+```yaml
+host_id: "hel1"      # optional; [A-Za-z0-9][A-Za-z0-9._-]*, scale set names stay within 64 characters
+
+groups:
+  - name: "kare-api" # scale set "kare-api-hel1", runner label "kare-api"
+    max_runners: 3
+```
+
+- With `host_id` set, each group registers a scale set named `<group>-<host_id>` that carries the group name as a label, so `runs-on: kare-api` reaches every host. Each host keeps its own budget, and the advertised capacity routes jobs to the hosts that have room.
+- Without `host_id`, the scale set is named after the group, as before. Two hosts must never run the same group without `host_id`: they would share one scale set.
+- Switching an existing host to `host_id` is a one-time step: run `ghr purge` with the old config first, then set `host_id` and start. A scale set left under the old name keeps the group label with no listener behind it, and jobs may still be routed to it.
 
 ### Per-runner cgroup limits (Linux, cgroup v2)
 

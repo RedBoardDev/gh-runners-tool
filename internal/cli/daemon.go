@@ -82,6 +82,7 @@ func buildDaemon(cfg *config.Config, creds *auth.Credentials, githubURL string) 
 		cfg.Groups, controller.ControllerConfig{
 			RunnerVersion: cfg.Runner.Version,
 			RunnerGroupID: cfg.GitHub.RunnerGroupID,
+			HostID:        cfg.HostID,
 		}, logger, host.controller...,
 	)
 

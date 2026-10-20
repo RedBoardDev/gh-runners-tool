@@ -1,14 +1,14 @@
 package capacity
 
-func (a *Allocator) admit(e *groupEntry) bool {
+func (a *Allocator) admit(e *groupEntry, held int, used Resources) bool {
 	need := e.spec.Reserve
-	if !fits(a.total, a.used, need) {
+	if !fits(a.total, used, need) {
 		return false
 	}
-	if e.held < e.spec.MinRunners {
+	if held < e.spec.MinRunners {
 		return true
 	}
-	if !fits(a.total, a.used, addResources(need, a.unmetFloors(e))) {
+	if !fits(a.total, used, addResources(need, a.unmetFloors(e))) {
 		return false
 	}
 	return !a.blockedByPriority(e)

@@ -67,9 +67,10 @@ func (c *GroupController) runGroupOnce(
 	labels []string,
 	groupLogger *slog.Logger,
 ) error {
-	ss, err := c.resolveScaleSet(ctx, group.Name, labels)
+	scaleSetName := config.ScaleSetName(group.Name, c.globalCfg.HostID)
+	ss, err := c.resolveScaleSet(ctx, scaleSetName, labels)
 	if err != nil {
-		return fmt.Errorf("resolve scale set %q: %w", group.Name, err)
+		return fmt.Errorf("resolve scale set %q: %w", scaleSetName, err)
 	}
 
 	hostname, err := os.Hostname()
@@ -100,8 +101,11 @@ func (c *GroupController) runGroupOnce(
 		return fmt.Errorf("create listener for %q: %w", group.Name, err)
 	}
 
+	scaler.advertiseTo(l)
+
 	groupLogger.InfoContext(ctx, "group listener started",
 		logging.KeyGroup, group.Name,
+		"scale_set", scaleSetName,
 		"scale_set_id", ss.ID,
 	)
 
@@ -112,15 +116,6 @@ func (c *GroupController) runGroupOnce(
 	if errors.Is(listenerErr, context.Canceled) {
 		c.forgetScaler(group.Name)
 		scaler.Shutdown(ctx)
-		cleanupCtx := context.WithoutCancel(ctx)
-		deleteErr := c.client.DeleteScaleSet(cleanupCtx, ss.ID)
-		if deleteErr != nil {
-			groupLogger.WarnContext(ctx, "failed to delete scale set on shutdown",
-				logging.KeyGroup, group.Name,
-				"scale_set_id", ss.ID,
-				logging.KeyError, deleteErr,
-			)
-		}
 		return context.Canceled
 	}
 

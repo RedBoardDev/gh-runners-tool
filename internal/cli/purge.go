@@ -99,11 +99,11 @@ func stopDaemonIfRunning() {
 func purgeScaleSets(ctx context.Context, ghClient *github.Client, cfg *config.Config, force bool, timeout time.Duration) int {
 	deletedSets := 0
 	for i := range cfg.Groups {
-		g := &cfg.Groups[i]
-		fmt.Printf("purging scale set %q...\n", g.Name)
-		ss, getErr := ghClient.GetScaleSet(ctx, cfg.GitHub.RunnerGroupID, g.Name)
+		name := config.ScaleSetName(cfg.Groups[i].Name, cfg.HostID)
+		fmt.Printf("purging scale set %q...\n", name)
+		ss, getErr := ghClient.GetScaleSet(ctx, cfg.GitHub.RunnerGroupID, name)
 		if getErr != nil {
-			fmt.Printf("  scale set %q not found, skipping\n", g.Name)
+			fmt.Printf("  scale set %q not found, skipping\n", name)
 			continue
 		}
 		if ss == nil {
@@ -111,15 +111,15 @@ func purgeScaleSets(ctx context.Context, ghClient *github.Client, cfg *config.Co
 		}
 
 		if !force {
-			waitForIdleRunners(ctx, ghClient, ss.ID, g.Name, timeout)
+			waitForIdleRunners(ctx, ghClient, ss.ID, name, timeout)
 		}
 
 		if delErr := ghClient.DeleteScaleSet(ctx, ss.ID); delErr != nil {
-			fmt.Printf("  failed to delete scale set %q: %v\n", g.Name, delErr)
+			fmt.Printf("  failed to delete scale set %q: %v\n", name, delErr)
 			continue
 		}
 		deletedSets++
-		fmt.Printf("  deleted scale set %q (id=%d)\n", g.Name, ss.ID)
+		fmt.Printf("  deleted scale set %q (id=%d)\n", name, ss.ID)
 	}
 	return deletedSets
 }

@@ -17,6 +17,7 @@ type GroupSpec struct {
 
 type Waker interface {
 	Wake(ctx context.Context)
+	CapacityChanged()
 }
 
 type Grant struct {
@@ -34,13 +35,14 @@ type groupEntry struct {
 }
 
 type Allocator struct {
-	mu      sync.Mutex
-	total   Resources
-	used    Resources
-	groups  map[string]*groupEntry
-	nextSeq uint64
-	wakeCh  chan struct{}
-	logger  *slog.Logger
+	mu       sync.Mutex
+	total    Resources
+	used     Resources
+	groups   map[string]*groupEntry
+	nextSeq  uint64
+	wakeCh   chan struct{}
+	changeCh chan struct{}
+	logger   *slog.Logger
 }
 
 func New(total Resources, specs []GroupSpec, logger *slog.Logger) *Allocator {
@@ -52,10 +54,11 @@ func New(total Resources, specs []GroupSpec, logger *slog.Logger) *Allocator {
 		groups[spec.Name] = &groupEntry{spec: spec}
 	}
 	return &Allocator{
-		total:  total,
-		groups: groups,
-		wakeCh: make(chan struct{}, 1),
-		logger: logger,
+		total:    total,
+		groups:   groups,
+		wakeCh:   make(chan struct{}, 1),
+		changeCh: make(chan struct{}, 1),
+		logger:   logger,
 	}
 }
 
@@ -72,6 +75,9 @@ func (a *Allocator) Unregister(group string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if e, ok := a.groups[group]; ok {
+		if e.waiting > 0 {
+			a.signalChange()
+		}
 		e.waker = nil
 		e.closed = true
 		e.waiting = 0
@@ -90,7 +96,7 @@ func (a *Allocator) Acquire(group string, want int) Grant {
 	}
 
 	var leases []*Lease
-	for len(leases) < want && a.admit(e) {
+	for len(leases) < want && a.admit(e, e.held, a.used) {
 		a.used = addResources(a.used, e.spec.Reserve)
 		e.held++
 		leases = append(leases, &Lease{alloc: a, group: group, reserve: e.spec.Reserve})
@@ -100,11 +106,30 @@ func (a *Allocator) Acquire(group string, want int) Grant {
 	if !e.closed {
 		change = a.updateWaiting(e, waiting)
 	}
+	if len(leases) > 0 || change != waitingUnchanged {
+		a.signalChange()
+	}
 	freeNow := free(a.total, a.used)
 	a.mu.Unlock()
 
 	a.logWaitingChange(group, e.spec.Reserve, freeNow, waiting, change)
 	return Grant{Leases: leases, Waiting: waiting}
+}
+
+func (a *Allocator) Capacity(group string, limit int) int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	e, ok := a.groups[group]
+	if !ok || e.spec.Reserve.IsZero() {
+		return limit
+	}
+	held, used := e.held, a.used
+	for held < limit && a.admit(e, held, used) {
+		held++
+		used = addResources(used, e.spec.Reserve)
+	}
+	return min(held, limit)
 }
 
 func (a *Allocator) grantUnbounded(group string, e *groupEntry, want int) Grant {
@@ -179,13 +204,40 @@ func (a *Allocator) signalWake() {
 	}
 }
 
+func (a *Allocator) signalChange() {
+	select {
+	case a.changeCh <- struct{}{}:
+	default:
+	}
+}
+
 func (a *Allocator) Run(ctx context.Context) error {
+	var wg sync.WaitGroup
+	wg.Go(func() { a.notifyChanges(ctx) })
+	defer wg.Wait()
+
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		case <-a.wakeCh:
 			a.wakeWaiting(ctx)
+		}
+	}
+}
+
+// A wake runs reconciles that start runners for seconds; notifying changes
+// from that same loop would leave every group advertising a stale capacity
+// to GitHub meanwhile.
+func (a *Allocator) notifyChanges(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-a.changeCh:
+			for _, w := range a.registeredWakers() {
+				w.CapacityChanged()
+			}
 		}
 	}
 }

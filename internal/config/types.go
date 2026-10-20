@@ -6,6 +6,7 @@ import (
 )
 
 type Config struct {
+	HostID        string              `yaml:"host_id"`
 	GitHub        GitHubConfig        `yaml:"github"`
 	Runner        RunnerConfig        `yaml:"runner"`
 	Capacity      *ResourceAmount     `yaml:"capacity,omitempty"`

@@ -42,6 +42,9 @@ type MacOSScaler struct {
 	lastCount   int
 	hasCount    bool
 
+	advertiseMu sync.Mutex
+	advertiser  capacityAdvertiser
+
 	mu      sync.Mutex
 	idle    map[string]*runner.Process
 	busy    map[string]*runner.Process
@@ -88,7 +91,11 @@ func (s *MacOSScaler) HandleDesiredRunnerCount(ctx context.Context, count int) (
 	s.reconcileMu.Lock()
 	defer s.reconcileMu.Unlock()
 
-	return s.reconcile(ctx, count), nil
+	runners := s.reconcile(ctx, count)
+	// The listener polls right after this returns; leaving the update to the
+	// allocator's notifier can send the pre-reconcile capacity for a whole poll.
+	s.advertiseCapacity()
+	return runners, nil
 }
 
 func (s *MacOSScaler) HandleJobStarted(ctx context.Context, jobInfo *scaleset.JobStarted) error {

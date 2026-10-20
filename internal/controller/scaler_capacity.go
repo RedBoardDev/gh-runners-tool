@@ -12,6 +12,11 @@ import (
 
 type capacityBudget interface {
 	Acquire(group string, want int) capacity.Grant
+	Capacity(group string, limit int) int
+}
+
+type capacityAdvertiser interface {
+	SetMaxRunners(count int)
 }
 
 type groupStatsSink interface {
@@ -40,6 +45,34 @@ func (s *MacOSScaler) Wake(ctx context.Context) {
 		return
 	}
 	s.reconcile(ctx, s.lastCount)
+}
+
+func (s *MacOSScaler) CapacityChanged() {
+	s.advertiseCapacity()
+}
+
+func (s *MacOSScaler) advertiseTo(advertiser capacityAdvertiser) {
+	s.advertiseMu.Lock()
+	s.advertiser = advertiser
+	s.advertiseMu.Unlock()
+
+	s.advertiseCapacity()
+}
+
+// Computing outside advertiseMu lets a stale count overwrite a fresher one,
+// and GitHub then assigns jobs this host has no room for.
+func (s *MacOSScaler) advertiseCapacity() {
+	s.advertiseMu.Lock()
+	defer s.advertiseMu.Unlock()
+
+	if s.advertiser == nil {
+		return
+	}
+	if s.budget == nil {
+		s.advertiser.SetMaxRunners(s.maxRunners)
+		return
+	}
+	s.advertiser.SetMaxRunners(s.budget.Capacity(s.groupName, s.maxRunners))
 }
 
 func (s *MacOSScaler) attach(scaleSetID int) {

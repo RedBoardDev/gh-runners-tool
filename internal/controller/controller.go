@@ -17,7 +17,6 @@ import (
 type scaleSetClient interface {
 	GetScaleSet(ctx context.Context, runnerGroupID int, name string) (*scaleset.RunnerScaleSet, error)
 	CreateScaleSet(ctx context.Context, name string, runnerGroupID int, labels []string) (*scaleset.RunnerScaleSet, error)
-	DeleteScaleSet(ctx context.Context, id int) error
 	GenerateJITConfig(ctx context.Context, scaleSetID int, runnerName string) (string, int, error)
 	RemoveRunner(ctx context.Context, runnerID int) error
 	OpenSession(ctx context.Context, scaleSetID int, owner string) (*scaleset.MessageSessionClient, error)
@@ -31,6 +30,7 @@ type notifier interface {
 type ControllerConfig struct {
 	RunnerVersion string
 	RunnerGroupID int
+	HostID        string
 }
 
 type GroupController struct {

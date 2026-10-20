@@ -205,6 +205,7 @@ func (s *MacOSScaler) Shutdown(ctx context.Context) {
 				logging.KeyError, cleanupErr,
 			)
 		}
+		s.deregisterRunner(ctx, t.name, t.proc.RunnerID)
 		if logsErr := s.logMgr.RemoveRunnerLogs(s.groupName, t.proc.Name); logsErr != nil {
 			s.logger.WarnContext(ctx, "failed to remove runner log dir during shutdown",
 				logging.KeyRunner, t.proc.Name,
