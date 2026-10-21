@@ -38,3 +38,16 @@ func (a *Allocator) waitingWakers() []Waker {
 	}
 	return wakers
 }
+
+func (a *Allocator) registeredWakers() []Waker {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	wakers := make([]Waker, 0, len(a.groups))
+	for _, e := range a.groups {
+		if e.waker != nil {
+			wakers = append(wakers, e.waker)
+		}
+	}
+	return wakers
+}

@@ -29,6 +29,7 @@ func (l *Lease) finish() bool {
 		return false
 	}
 	l.done = true
+	a.signalChange()
 	a.used = subResources(a.used, l.reserve)
 	if e, ok := a.groups[l.group]; ok {
 		e.held--

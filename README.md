@@ -86,9 +86,11 @@ ghr restart
 # Stop the daemon
 ghr stop
 
-# Emergency reset (kill all runners, clean workdirs)
+# Emergency reset (kill all runners, delete this host's scale sets, clean workdirs)
 ghr purge
 ```
+
+`ghr stop` and `ghr restart` keep the scale sets on GitHub; only `ghr purge` deletes them. A label change on an existing scale set is therefore applied by `ghr purge` followed by `ghr start`.
 
 ### Host capacity budget
 
@@ -120,9 +122,28 @@ groups:
 - When capacity is released, waiting groups are re-evaluated immediately in priority order instead of at their next poll.
 - With a budget configured, idle runners above `max(min_runners, demand - busy)` are torn down when queued jobs disappear, so they stop holding capacity. Without a budget nothing is torn down.
 - A dimension left out of `capacity` is not limited. `reserve` and `priority` without `capacity` are ignored with a warning.
+- Each group advertises to GitHub, as its scale set's maximum capacity, the runners it holds plus its share of the free budget, so GitHub stops assigning jobs to a host that has no room for them. The free budget is shared out in admission order, each runner counted once, always within `max_runners`, the other groups' minimums and strict priority: groups waiting for capacity claim it first (priority, then waiting order); then every group that is not saturated takes one runner of headroom; then the rest is dealt one runner at a time to the saturated groups, and only what they cannot use to every group with a listener (priority, then group name). A group is saturated when the last assigned job count GitHub reported reaches the capacity it advertised, so more jobs may be queued behind that cap: a single loaded group on an idle host advertises the whole free budget but one runner per other group in one step. When no group is waiting, a group left without a share still advertises one more runner if it would be admitted on its own, so an idle group never starves another one of the last free runner; this can attract at most one job per group that then waits locally, and that wait switches the host back to strict sharing. The value is refreshed on every reservation, release, change of waiting demand or saturation and listener start or stop, and GitHub reads it at the next long poll; after each message a group handles, its own value is set before that poll starts. Warm `min_runners` runners count as capacity they already hold, never as room for more.
 - Deferred demand is reported as an info-level "waiting for capacity" health issue, never as a degraded group. `ghr status` (and the JSON status API) shows the budget total, used and free, and per group the reserved and waiting runner counts. Waiting state changes are logged once per change.
 
 Sizes accept `K`, `M`, `G`, `T` and `KiB`, `MiB`, `GiB`, `TiB` (powers of 1024, like systemd and Docker) as well as `KB`, `MB`, `GB`, `TB` (powers of 1000).
+
+### Several hosts
+
+Run one ghr per host with the same groups and give each host its own `host_id`:
+
+```yaml
+host_id: "hel1"      # optional; [A-Za-z0-9][A-Za-z0-9._]* (no dash), scale set names stay within 64 characters
+
+groups:
+  - name: "kare-api" # scale set "kare-api-hel1", runner label "kare-api"
+    max_runners: 3
+```
+
+- With `host_id` set, each group registers a scale set named `<group>-<host_id>` that carries the group name as a label, so `runs-on: kare-api` reaches every host. Each host keeps its own budget, and the advertised capacity routes jobs to the hosts that have room.
+- Every host needs its own `host_id`: two hosts with the same one would share each group's scale set. A dash is rejected so that `<group>-<host_id>` can only come from one group on one host, and groups whose scale set names differ only by case are rejected.
+- Without `host_id`, the scale set is named after the group, as before. Two hosts must never run the same group without `host_id`: they would share one scale set.
+- After a crash, startup kills the runners left behind and deregisters their registrations in the group's scale set. Only runners found in this host's own workdirs are deregistered, so another host's runners are never touched, even under a shared legacy name.
+- Switching an existing host to `host_id` is a one-time step: run `ghr purge` with the old config first, then set `host_id` and start. A scale set left under the old name keeps the group label with no listener behind it, and jobs may still be routed to it.
 
 ### Per-runner cgroup limits (Linux, cgroup v2)
 
@@ -161,6 +182,7 @@ OOMPolicy=continue
 WantedBy=multi-user.target
 ```
 
+- Keep `daemon.shutdown_timeout` (default 30s) well below `TimeoutStopSec`: on stop, ghr deregisters every runner from GitHub in parallel, an idle one before stopping it and a busy one once stopped, and returns when that timeout expires even if runners are still stopping or being cleaned up. A runner that ignores SIGTERM is killed at the timeout instead of after its 10s grace period, the runners still registered then are logged, and a workdir left half cleaned is removed at the next start.
 - `Delegate=yes` hands the unit's cgroup subtree to ghr.
 - Keep the default `KillMode=control-group`. With `process` or `mixed`, runner cgroups can survive a stop, and the next start then fails with `EBUSY` on cgroup v2's no-internal-processes rule.
 - On systemd 254 or newer, `DelegateSubgroup=daemon` is an option: systemd then places the service in the `daemon` leaf itself.

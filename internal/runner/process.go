@@ -185,17 +185,19 @@ func (m *ProcessManager) Stop(ctx context.Context, proc *Process) error {
 	select {
 	case <-proc.done:
 		return exitResult(proc.waitErr)
+	case <-ctx.Done():
 	case <-time.After(stopGracePeriod):
-		m.logger.WarnContext(ctx, "runner did not exit after SIGTERM, sending SIGKILL", logging.KeyRunner, proc.Name, logging.KeyPID, proc.PID)
-		if err := proc.cmd.Process.Kill(); err != nil {
-			return fmt.Errorf("kill runner %s (pid %d): %w", proc.Name, proc.PID, err)
-		}
-		select {
-		case <-proc.done:
-			return exitResult(proc.waitErr)
-		case <-time.After(killTimeout):
-			return fmt.Errorf("runner %s (pid %d) did not exit after SIGKILL within %s", proc.Name, proc.PID, killTimeout)
-		}
+	}
+
+	m.logger.WarnContext(ctx, "runner did not exit after SIGTERM, sending SIGKILL", logging.KeyRunner, proc.Name, logging.KeyPID, proc.PID)
+	if err := proc.cmd.Process.Kill(); err != nil && !isProcessFinished(err) {
+		return fmt.Errorf("kill runner %s (pid %d): %w", proc.Name, proc.PID, err)
+	}
+	select {
+	case <-proc.done:
+		return exitResult(proc.waitErr)
+	case <-time.After(killTimeout):
+		return fmt.Errorf("runner %s (pid %d) did not exit after SIGKILL within %s", proc.Name, proc.PID, killTimeout)
 	}
 }
 

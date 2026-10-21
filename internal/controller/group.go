@@ -67,10 +67,13 @@ func (c *GroupController) runGroupOnce(
 	labels []string,
 	groupLogger *slog.Logger,
 ) error {
-	ss, err := c.resolveScaleSet(ctx, group.Name, labels)
+	scaleSetName := config.ScaleSetName(group.Name, c.globalCfg.HostID)
+	ss, err := c.resolveScaleSet(ctx, scaleSetName, labels)
 	if err != nil {
-		return fmt.Errorf("resolve scale set %q: %w", group.Name, err)
+		return fmt.Errorf("resolve scale set %q: %w", scaleSetName, err)
 	}
+
+	c.removeStaleRegistrations(ctx, group.Name, ss.ID, groupLogger)
 
 	hostname, err := os.Hostname()
 	if err != nil {
@@ -100,8 +103,11 @@ func (c *GroupController) runGroupOnce(
 		return fmt.Errorf("create listener for %q: %w", group.Name, err)
 	}
 
+	scaler.advertiseTo(l)
+
 	groupLogger.InfoContext(ctx, "group listener started",
 		logging.KeyGroup, group.Name,
+		"scale_set", scaleSetName,
 		"scale_set_id", ss.ID,
 	)
 
@@ -110,17 +116,7 @@ func (c *GroupController) runGroupOnce(
 	c.unregisterScaler(group.Name)
 
 	if errors.Is(listenerErr, context.Canceled) {
-		c.forgetScaler(group.Name)
-		scaler.Shutdown(ctx)
-		cleanupCtx := context.WithoutCancel(ctx)
-		deleteErr := c.client.DeleteScaleSet(cleanupCtx, ss.ID)
-		if deleteErr != nil {
-			groupLogger.WarnContext(ctx, "failed to delete scale set on shutdown",
-				logging.KeyGroup, group.Name,
-				"scale_set_id", ss.ID,
-				logging.KeyError, deleteErr,
-			)
-		}
+		c.retainForShutdown(group.Name, scaler)
 		return context.Canceled
 	}
 
@@ -144,6 +140,52 @@ func (c *GroupController) resolveScaleSet(ctx context.Context, name string, labe
 		return nil, fmt.Errorf("create scale set %q: %w", name, err)
 	}
 	return &resolvedScaleSet{ID: ss.ID, Name: ss.Name}, nil
+}
+
+// Only names found in this host's own workdirs are looked up: listing the
+// scale set's runners instead would also remove the live runners of every
+// other host that shares a legacy scale set name.
+func (c *GroupController) removeStaleRegistrations(ctx context.Context, group string, scaleSetID int, logger *slog.Logger) {
+	c.mu.Lock()
+	names := c.staleRunners[group]
+	delete(c.staleRunners, group)
+	c.mu.Unlock()
+
+	var retry []string
+	for _, name := range names {
+		ref, err := c.client.GetRunnerByName(ctx, name)
+		if err != nil {
+			logger.WarnContext(ctx, "failed to look up stale runner registration",
+				logging.KeyRunner, name,
+				logging.KeyGroup, group,
+				logging.KeyError, err,
+			)
+			retry = append(retry, name)
+			continue
+		}
+		if ref == nil || ref.RunnerScaleSetID != scaleSetID {
+			continue
+		}
+		if err := c.client.RemoveRunner(ctx, ref.ID); err != nil {
+			logger.WarnContext(ctx, "failed to deregister stale runner",
+				logging.KeyRunner, name,
+				logging.KeyGroup, group,
+				logging.KeyError, err,
+			)
+			retry = append(retry, name)
+			continue
+		}
+		logger.InfoContext(ctx, "deregistered stale runner",
+			logging.KeyRunner, name,
+			logging.KeyGroup, group,
+		)
+	}
+
+	if len(retry) > 0 {
+		c.mu.Lock()
+		c.staleRunners[group] = append(c.staleRunners[group], retry...)
+		c.mu.Unlock()
+	}
 }
 
 func labelsChanged(existing []scaleset.Label, desired []string) bool {

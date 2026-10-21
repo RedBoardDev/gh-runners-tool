@@ -12,6 +12,12 @@ import (
 
 type capacityBudget interface {
 	Acquire(group string, want int) capacity.Grant
+	Capacity(group string) int
+	SetSaturated(group string, saturated bool)
+}
+
+type capacityAdvertiser interface {
+	SetMaxRunners(count int)
 }
 
 type groupStatsSink interface {
@@ -40,6 +46,48 @@ func (s *MacOSScaler) Wake(ctx context.Context) {
 		return
 	}
 	s.reconcile(ctx, s.lastCount)
+}
+
+func (s *MacOSScaler) CapacityChanged() {
+	s.advertiseCapacity()
+}
+
+func (s *MacOSScaler) advertiseTo(advertiser capacityAdvertiser) {
+	s.advertiseMu.Lock()
+	s.advertiser = advertiser
+	s.advertiseMu.Unlock()
+
+	s.advertiseCapacity()
+}
+
+// Computing outside advertiseMu lets a stale count overwrite a fresher one,
+// and GitHub then assigns jobs this host has no room for.
+func (s *MacOSScaler) advertiseCapacity() {
+	s.advertiseMu.Lock()
+	defer s.advertiseMu.Unlock()
+
+	if s.advertiser == nil {
+		return
+	}
+	if s.budget == nil {
+		s.advertiser.SetMaxRunners(s.maxRunners)
+		return
+	}
+	s.advertised = s.budget.Capacity(s.groupName)
+	s.advertiser.SetMaxRunners(s.advertised)
+}
+
+// GitHub caps the assigned count at the capacity advertised for the poll that
+// produced it: comparing with a recomputed capacity instead makes a loaded
+// group look idle as soon as its capacity grows, and the ramp-up stalls.
+func (s *MacOSScaler) reportAssigned(count int) {
+	if s.budget == nil {
+		return
+	}
+	s.advertiseMu.Lock()
+	saturated := count > 0 && count >= s.advertised
+	s.advertiseMu.Unlock()
+	s.budget.SetSaturated(s.groupName, saturated)
 }
 
 func (s *MacOSScaler) attach(scaleSetID int) {

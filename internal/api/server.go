@@ -96,9 +96,12 @@ func (s *Server) Run(ctx context.Context) error {
 		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
 		shutdownErr := srv.Shutdown(shutdownCtx)
-		<-errCh
+		serveErr := <-errCh
 		if shutdownErr != nil {
 			return fmt.Errorf("shutdown api server: %w", shutdownErr)
+		}
+		if serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+			return fmt.Errorf("api server: %w", serveErr)
 		}
 		return nil
 	case err := <-errCh:

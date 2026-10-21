@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -22,12 +23,16 @@ func TestCleanupStale_DeadProcess(t *testing.T) {
 	}
 
 	pm := NewProcessManager(workdirBase, silentLogger())
-	if err := pm.CleanupStale(context.Background()); err != nil {
+	stale, err := pm.CleanupStale(context.Background())
+	if err != nil {
 		t.Fatalf("CleanupStale: %v", err)
 	}
 
 	if _, err := os.Stat(runnerDir); !os.IsNotExist(err) {
 		t.Fatalf("expected runner dir to be removed, stat returned: %v", err)
+	}
+	if want := map[string][]string{"group-a": {"runner-1"}}; !reflect.DeepEqual(stale, want) {
+		t.Fatalf("stale runners = %v, want %v so their registrations can be removed", stale, want)
 	}
 }
 
@@ -35,14 +40,14 @@ func TestCleanupStale_EmptyDir(t *testing.T) {
 	workdirBase := t.TempDir()
 
 	pm := NewProcessManager(workdirBase, silentLogger())
-	if err := pm.CleanupStale(context.Background()); err != nil {
+	if _, err := pm.CleanupStale(context.Background()); err != nil {
 		t.Fatalf("CleanupStale on empty dir: %v", err)
 	}
 }
 
 func TestCleanupStale_NonexistentDir(t *testing.T) {
 	pm := NewProcessManager("/nonexistent/path/that/does/not/exist", silentLogger())
-	if err := pm.CleanupStale(context.Background()); err != nil {
+	if _, err := pm.CleanupStale(context.Background()); err != nil {
 		t.Fatalf("CleanupStale on nonexistent dir: %v", err)
 	}
 }
@@ -57,7 +62,7 @@ func TestCleanupStale_NoPidFile(t *testing.T) {
 	}
 
 	pm := NewProcessManager(workdirBase, silentLogger())
-	if err := pm.CleanupStale(context.Background()); err != nil {
+	if _, err := pm.CleanupStale(context.Background()); err != nil {
 		t.Fatalf("CleanupStale: %v", err)
 	}
 

@@ -1,3 +1,5 @@
+# host_id: "hel1"        # unique per host, no dash; set on every host that runs the same groups; scale sets become <group>-<host_id>
+
 github:
   url: "https://github.com/my-org"
   runner_group: "default"

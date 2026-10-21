@@ -340,6 +340,7 @@ type recordingWaker struct {
 }
 
 func (w recordingWaker) Wake(context.Context) { w.woken <- w.name }
+func (recordingWaker) CapacityChanged()       {}
 
 func TestWakeWaiting_PriorityOrderThenFIFO(t *testing.T) {
 	a := newAllocator(res(4, 4),

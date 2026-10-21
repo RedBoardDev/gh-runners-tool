@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/model"
 )
@@ -74,6 +75,42 @@ func TestCleanup(t *testing.T) {
 
 	if _, err := os.Stat(workdir); !os.IsNotExist(err) {
 		t.Fatalf("expected workdir to be removed, stat returned: %v", err)
+	}
+}
+
+func TestStop_KillsARunnerIgnoringSIGTERMAtTheContextDeadline(t *testing.T) {
+	pm := NewProcessManager(t.TempDir(), silentLogger())
+	workdir := writeRunScript(t, "#!/bin/sh\ntrap '' TERM\ntouch trapped\nwhile :; do sleep 1; done\n")
+	proc, err := pm.Start(context.Background(), &model.RunnerInstance{Name: "stubborn-ab12", Group: "stubborn"}, workdir, "jit", nil)
+	if err != nil {
+		t.Fatalf("Start() = %v", err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if _, statErr := os.Stat(filepath.Join(workdir, "trapped")); statErr == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the runner never installed its SIGTERM trap")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	stopErr := pm.Stop(ctx, proc)
+
+	if elapsed := time.Since(start); elapsed > stopGracePeriod/2 {
+		t.Fatalf("Stop() took %s past a 100ms deadline", elapsed)
+	}
+	if stopErr != nil {
+		t.Fatalf("Stop() = %v, want the killed runner reaped", stopErr)
+	}
+	select {
+	case <-proc.Exited():
+	default:
+		t.Fatal("Stop() returned while the runner was still running")
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"sync"
 	"testing"
 
 	"github.com/RedBoardDev/gh-runners-tool/v2/internal/logging"
@@ -15,8 +16,10 @@ type fakeScaleSetClient struct {
 	scaleSetClient
 	jitID     int
 	jitErr    error
-	removed   []int
 	removeErr error
+
+	mu      sync.Mutex
+	removed []int
 }
 
 func (f *fakeScaleSetClient) GenerateJITConfig(_ context.Context, _ int, _ string) (string, int, error) {
@@ -27,6 +30,8 @@ func (f *fakeScaleSetClient) GenerateJITConfig(_ context.Context, _ int, _ strin
 }
 
 func (f *fakeScaleSetClient) RemoveRunner(_ context.Context, id int) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.removed = append(f.removed, id)
 	return f.removeErr
 }

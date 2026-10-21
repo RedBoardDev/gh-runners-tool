@@ -64,6 +64,7 @@ func buildCapacity(cfg *config.Config, logger *slog.Logger) (*capacity.Allocator
 			Name:       g.Name,
 			Priority:   g.Priority,
 			MinRunners: g.MinRunners,
+			MaxRunners: g.MaxRunners,
 			Reserve:    reserve,
 		})
 	}
